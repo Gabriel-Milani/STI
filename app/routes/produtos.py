@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from ..database import get_db, rows_to_list, row_to_dict
 from ..services.auth_utils import login_required, current_user_id, current_user_name
 from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit, location_label
-from ..services.unit_control import create_units, is_unit_product, sync_unit_stock
+from ..services.unit_control import create_units, is_unit_product, record_movement_units, sync_unit_stock
 
 produtos_bp = Blueprint("produtos", __name__)
 
@@ -125,7 +125,7 @@ def criar():
                 unidades_codigos = create_units(db, produto, quantidade, "Quantidade inicial")
                 sync_unit_stock(db, produto_id)
             if quantidade > 0:
-                db.execute(
+                mov_cur = db.execute(
                     """
                     INSERT INTO movimentacoes
                     (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, responsavel_origem, observacao, unidades_codigos, localizacao_destino_id, usuario_id)
@@ -133,6 +133,7 @@ def criar():
                     """,
                     (produto_id, quantidade, quantidade, current_user_name() or data.get("recebido_por") or data.get("operador"), "Quantidade inicial", ",".join(unidades_codigos) if unidades_codigos else None, loc["id"], current_user_id()),
                 )
+                record_movement_units(db, mov_cur.lastrowid, unidades_codigos, "disponivel")
             audit(db, current_user_id(), "criar", "produto", produto_id, codigo)
             db.commit()
             return api_ok({"id": produto_id, "codigo": codigo}, "Produto cadastrado.", 201)
@@ -182,7 +183,7 @@ def atualizar(produto_id):
         minimo = parse_int(data.get("estoque_minimo", produto["estoque_minimo"]))
         if minimo < 0:
             return api_error("Estoque mínimo não pode ser negativo.", 400)
-        codigo_barras = (data.get("codigo_barras", produto["codigo_barras"]) or "").strip() or None
+        codigo_barras = (data.get("codigo_barras", produto["codigo_barras"]) or "").strip() or generate_barcode(db)
         try:
             db.execute(
                 """

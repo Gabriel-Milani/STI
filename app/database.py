@@ -67,6 +67,21 @@ def apply_migrations(db):
     db.execute("CREATE INDEX IF NOT EXISTS idx_unidades_produto_status ON produto_unidades(produto_id, status)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_unidades_codigo ON produto_unidades(codigo_unidade)")
     db.execute("""
+        CREATE TABLE IF NOT EXISTS movimentacao_unidades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            movimentacao_id INTEGER NOT NULL,
+            unidade_id INTEGER NOT NULL,
+            codigo_unidade TEXT NOT NULL,
+            status_resultante TEXT NOT NULL,
+            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (movimentacao_id) REFERENCES movimentacoes(id),
+            FOREIGN KEY (unidade_id) REFERENCES produto_unidades(id),
+            UNIQUE(movimentacao_id, unidade_id)
+        )
+    """)
+    db.execute("CREATE INDEX IF NOT EXISTS idx_mov_unidades_mov ON movimentacao_unidades(movimentacao_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_mov_unidades_codigo ON movimentacao_unidades(codigo_unidade)")
+    db.execute("""
         CREATE TABLE IF NOT EXISTS codigo_barras_sequence (
             id INTEGER PRIMARY KEY CHECK(id = 1),
             last_value INTEGER NOT NULL DEFAULT 0
@@ -243,6 +258,21 @@ CREATE TABLE IF NOT EXISTS emprestimos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_emp_status ON emprestimos(status);
+
+CREATE TABLE IF NOT EXISTS movimentacao_unidades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movimentacao_id INTEGER NOT NULL,
+    unidade_id INTEGER NOT NULL,
+    codigo_unidade TEXT NOT NULL,
+    status_resultante TEXT NOT NULL,
+    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (movimentacao_id) REFERENCES movimentacoes(id),
+    FOREIGN KEY (unidade_id) REFERENCES produto_unidades(id),
+    UNIQUE(movimentacao_id, unidade_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mov_unidades_mov ON movimentacao_unidades(movimentacao_id);
+CREATE INDEX IF NOT EXISTS idx_mov_unidades_codigo ON movimentacao_unidades(codigo_unidade);
 
 CREATE TABLE IF NOT EXISTS codigo_barras_sequence (
     id INTEGER PRIMARY KEY CHECK(id = 1),

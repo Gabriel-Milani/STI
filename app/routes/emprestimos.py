@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from ..database import get_db, rows_to_list
 from ..services.auth_utils import login_required, current_user_id, current_user_name
 from ..services.helpers import api_ok, api_error, parse_int, audit
-from ..services.unit_control import is_unit_product, restore_units, split_codes, sync_unit_stock
+from ..services.unit_control import is_unit_product, record_movement_units, restore_units, split_codes, sync_unit_stock
 
 emprestimos_bp = Blueprint("emprestimos", __name__)
 
@@ -71,6 +71,7 @@ def devolver(emprestimo_id):
                 """,
                 (produto["id"], qtd, antes, depois, emp["emprestado_para"], recebido_por, data.get("observacao"), ",".join(unidades_codigos) if unidades_codigos else None, produto["localizacao_id"], produto["localizacao_id"], current_user_id()),
             )
+            record_movement_units(db, cur.lastrowid, unidades_codigos, "disponivel")
             db.execute(
                 "UPDATE emprestimos SET status='devolvido', data_devolucao=CURRENT_TIMESTAMP, recebido_por=?, movimentacao_devolucao_id=? WHERE id=?",
                 (recebido_por, cur.lastrowid, emprestimo_id),

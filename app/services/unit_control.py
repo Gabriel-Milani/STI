@@ -71,5 +71,24 @@ def restore_units(db, codigos):
     )
 
 
+def record_movement_units(db, movimentacao_id, codigos, status_resultante):
+    if not codigos:
+        return
+    placeholders = ",".join("?" for _ in codigos)
+    rows = db.execute(
+        f"SELECT id, codigo_unidade FROM produto_unidades WHERE codigo_unidade IN ({placeholders})",
+        codigos,
+    ).fetchall()
+    for row in rows:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO movimentacao_unidades
+            (movimentacao_id, unidade_id, codigo_unidade, status_resultante)
+            VALUES (?, ?, ?, ?)
+            """,
+            (movimentacao_id, row["id"], row["codigo_unidade"], status_resultante),
+        )
+
+
 def split_codes(value):
     return [item.strip() for item in (value or "").split(",") if item.strip()]

@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from ..database import get_db, rows_to_list
 from ..services.auth_utils import login_required, current_user_id, current_user_name
 from ..services.helpers import api_ok, api_error, parse_int, audit
-from ..services.unit_control import create_units, is_unit_product, sync_unit_stock, take_available_units
+from ..services.unit_control import create_units, is_unit_product, record_movement_units, sync_unit_stock, take_available_units
 
 movimentacoes_bp = Blueprint("movimentacoes", __name__)
 
@@ -34,6 +34,15 @@ def create_mov(db, produto, tipo, qtd, antes, depois, data, unidades_codigos=Non
             produto["localizacao_id"], produto["localizacao_id"], current_user_id()
         ),
     )
+    status_resultante = {
+        "entrada": "disponivel",
+        "retirada": "retirado",
+        "emprestimo": "emprestado",
+        "descarte": "descartado",
+        "devolucao": "disponivel",
+    }.get(tipo)
+    if status_resultante:
+        record_movement_units(db, cur.lastrowid, unidades_codigos, status_resultante)
     return cur.lastrowid
 
 
