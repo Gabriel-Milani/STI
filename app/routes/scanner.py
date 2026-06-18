@@ -11,6 +11,23 @@ scanner_bp = Blueprint("scanner", __name__)
 def buscar(codigo):
     codigo = codigo.strip()
     with get_db() as db:
+        unidade = db.execute(
+            """
+            SELECT u.*, p.codigo AS produto_codigo, p.nome AS produto_nome, p.localizacao_id AS produto_localizacao_id
+            FROM produto_unidades u
+            JOIN produtos p ON p.id = u.produto_id
+            WHERE u.codigo_unidade = ? AND p.ativo = 1
+            """,
+            (codigo,),
+        ).fetchone()
+        if unidade:
+            produto = db.execute("SELECT * FROM produtos WHERE id = ?", (unidade["produto_id"],)).fetchone()
+            loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (unidade["localizacao_id"],)).fetchone()
+            p = row_to_dict(produto)
+            p["localizacao"] = row_to_dict(loc)
+            p["localizacao_label"] = location_label(loc)
+            return api_ok({"tipo": "unidade", "produto": p, "unidade": row_to_dict(unidade), "localizacao": row_to_dict(loc)})
+
         produto = db.execute(
             "SELECT * FROM produtos WHERE ativo = 1 AND (codigo = ? OR codigo_barras = ?)",
             (codigo, codigo),

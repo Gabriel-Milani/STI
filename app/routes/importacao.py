@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from openpyxl import load_workbook
 from ..database import get_db
 from ..services.auth_utils import login_required, current_user_id
-from ..services.helpers import api_ok, api_error, generate_product_code, parse_int, audit
+from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit
 
 importacao_bp = Blueprint("importacao", __name__)
 
@@ -54,7 +54,7 @@ def importar_produtos():
             if qtd < 0 or minimo < 0:
                 erros.append({"linha": row_num, "erro": "Quantidade ou mínimo negativo"})
                 continue
-            codigo_barras = str(data.get("codigo_barras") or "").strip() or None
+            codigo_barras = str(data.get("codigo_barras") or "").strip() or generate_barcode(db)
             try:
                 codigo = generate_product_code(nome)
                 cur = db.execute(

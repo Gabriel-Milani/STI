@@ -38,6 +38,24 @@ def generate_product_code(nome):
         return candidate
 
 
+def generate_barcode(db):
+    row = db.execute("SELECT last_value FROM codigo_barras_sequence WHERE id = 1").fetchone()
+    if not row:
+        db.execute("INSERT INTO codigo_barras_sequence (id, last_value) VALUES (1, 0)")
+        last_value = 0
+    else:
+        last_value = row["last_value"]
+
+    while True:
+        last_value += 1
+        if last_value > 9999999:
+            raise ValueError("Limite de códigos de barras automáticos atingido.")
+        codigo = f"P{last_value:07d}"
+        db.execute("UPDATE codigo_barras_sequence SET last_value = ? WHERE id = 1", (last_value,))
+        if not db.execute("SELECT id FROM produtos WHERE codigo_barras = ?", (codigo,)).fetchone():
+            return codigo
+
+
 def require_fields(payload, fields):
     missing = [f for f in fields if payload.get(f) in (None, "")]
     return missing

@@ -51,12 +51,32 @@ function escapeHtml(value) {
 }
 
 function setAlert(message, type = "success", targetId = "alert") {
+    showToast(message, type);
     const target = byId(targetId);
-    if (!target) return;
-    target.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
-        ${escapeHtml(message)}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    if (target) target.innerHTML = "";
+}
+
+function showToast(message, type = "success") {
+    let container = byId("toastContainer");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toastContainer";
+        container.className = "toast-container position-fixed top-0 end-0 p-3";
+        container.style.zIndex = "1080";
+        document.body.appendChild(container);
+    }
+    const cls = { success: "text-bg-success", danger: "text-bg-danger", error: "text-bg-danger", warning: "text-bg-warning", aviso: "text-bg-warning" }[type] || "text-bg-secondary";
+    const toast = document.createElement("div");
+    toast.className = `toast align-items-center border-0 ${cls}`;
+    toast.setAttribute("role", "status");
+    toast.innerHTML = `<div class="d-flex">
+        <div class="toast-body">${escapeHtml(message)}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
     </div>`;
+    container.appendChild(toast);
+    const instance = bootstrap.Toast.getOrCreateInstance(toast, { delay: 3500 });
+    toast.addEventListener("hidden.bs.toast", () => toast.remove());
+    instance.show();
 }
 
 function statusBadge(status) {

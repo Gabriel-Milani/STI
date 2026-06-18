@@ -22,9 +22,18 @@
                     <div class="card shadow-sm"><div class="card-header bg-white fw-semibold">Dados do produto</div>
                         <div class="card-body vstack gap-3">
                             <input class="form-control" name="nome" placeholder="Nome" required autofocus>
-                            <div class="row g-2"><div class="col-md"><input class="form-control" name="categoria" placeholder="Categoria"></div><div class="col-md"><input class="form-control" name="marca" placeholder="Marca"></div></div>
+                            <div class="row g-2"><div class="col-md"><input class="form-control" name="categoria" placeholder="Categoria"></div></div>
                             <input class="form-control" name="modelo" placeholder="Modelo">
                             <input class="form-control" name="codigo_barras" placeholder="Código de barras">
+                            <div class="row g-2">
+                                <div class="col-md">
+                                    <select class="form-select" name="tipo_controle" id="tipoControle">
+                                        <option value="quantidade">Controle por quantidade</option>
+                                        <option value="unidade">Controle por unidade</option>
+                                    </select>
+                                </div>
+                                <div class="col-md"><input class="form-control" name="prefixo_rastreio" id="prefixoRastreio" placeholder="Prefixo de rastreio" disabled></div>
+                            </div>
                             <div class="row g-2"><div class="col"><input class="form-control" type="number" min="0" name="quantidade_inicial" placeholder="Qtd. inicial" value="0"></div><div class="col"><input class="form-control" type="number" min="0" name="estoque_minimo" placeholder="Mínimo" value="0"></div></div>
                             <textarea class="form-control" name="observacao" rows="3" placeholder="Observação"></textarea>
                         </div>

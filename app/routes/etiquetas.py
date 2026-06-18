@@ -1,4 +1,4 @@
-from flask import Blueprint, send_file, current_app
+from flask import Blueprint, send_file
 from io import BytesIO
 import qrcode
 from ..database import get_db
@@ -23,8 +23,7 @@ def produto_qr(produto_id):
         p = db.execute("SELECT codigo FROM produtos WHERE id = ? AND ativo = 1", (produto_id,)).fetchone()
         if not p:
             return api_error("Produto não encontrado.", 404)
-        url = f"{current_app.config['APP_BASE_URL']}/produtos/{p['codigo']}"
-        return send_file(qr_png(url), mimetype="image/png", download_name=f"{p['codigo']}.png")
+        return send_file(qr_png(p["codigo"]), mimetype="image/png", download_name=f"{p['codigo']}.png")
 
 
 @etiquetas_bp.get("/localizacao/<codigo>/qr.png")
@@ -34,5 +33,4 @@ def localizacao_qr(codigo):
         l = db.execute("SELECT codigo FROM localizacoes WHERE codigo = ? AND ativo = 1", (codigo,)).fetchone()
         if not l:
             return api_error("Localização não encontrada.", 404)
-        url = f"{current_app.config['APP_BASE_URL']}/localizacoes/{l['codigo']}"
-        return send_file(qr_png(url), mimetype="image/png", download_name=f"{l['codigo']}.png")
+        return send_file(qr_png(l["codigo"]), mimetype="image/png", download_name=f"{l['codigo']}.png")
