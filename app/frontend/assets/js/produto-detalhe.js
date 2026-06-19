@@ -3,29 +3,30 @@ mountNav("produtos");
 let product = null;
 let locations = [];
 let selectedMoveShelf = "";
+let editModal = null;
 
 const movementFields = {
     entrada: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-5"><input class="form-control" name="recebido_por" placeholder="Recebido por"></div>
+        <div class="col-md-5"><input class="form-control" value="Recebido por: usuário logado" disabled></div>
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
     retirada: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" name="entregue_por" placeholder="Entregue por" required></div>
+        <div class="col-md-4"><input class="form-control" value="Entregue por: usuário logado" disabled></div>
         <div class="col-md-5"><input class="form-control" name="entregue_para" placeholder="Entregue para" required></div>
         <div class="col-md-6"><input class="form-control" name="destino" placeholder="Destino"></div>
         <div class="col-md-6"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
     emprestimo: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" name="entregue_por" placeholder="Entregue por" required></div>
+        <div class="col-md-4"><input class="form-control" value="Entregue por: usuário logado" disabled></div>
         <div class="col-md-5"><input class="form-control" name="emprestado_para" placeholder="Emprestado para" required></div>
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
     descarte: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" name="descartado_por" placeholder="Descartado por" required></div>
+        <div class="col-md-4"><input class="form-control" value="Descartado por: usuário logado" disabled></div>
         <div class="col-md-5"><input class="form-control" name="motivo" placeholder="Motivo" required></div>
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
@@ -55,6 +56,8 @@ async function loadProduct() {
     product = data.produto;
     byId("productTitle").textContent = product.nome;
     byId("productMeta").textContent = `${product.codigo} · ${product.localizacao_label}`;
+    byId("currentLocationLabel").textContent = product.localizacao_label;
+    byId("currentLocationCode").textContent = `Código: ${product.localizacao.codigo}`;
     byId("productInfo").innerHTML = `
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div>${statusBadge(product.status)}</div>
@@ -64,15 +67,37 @@ async function loadProduct() {
             <dt class="col-5">Quantidade</dt><dd class="col-7">${product.quantidade_atual}</dd>
             <dt class="col-5">Mínimo</dt><dd class="col-7">${product.estoque_minimo}</dd>
             <dt class="col-5">Categoria</dt><dd class="col-7">${escapeHtml(product.categoria || "-")}</dd>
-            <dt class="col-5">Marca</dt><dd class="col-7">${escapeHtml(product.marca || "-")}</dd>
             <dt class="col-5">Modelo</dt><dd class="col-7">${escapeHtml(product.modelo || "-")}</dd>
             <dt class="col-5">Barras</dt><dd class="col-7">${escapeHtml(product.codigo_barras || "-")}</dd>
+            <dt class="col-5">Controle</dt><dd class="col-7">${product.tipo_controle === "unidade" ? "Unidade" : "Quantidade"}</dd>
+            ${product.tipo_controle === "unidade" ? `<dt class="col-5">Prefixo</dt><dd class="col-7">${escapeHtml(product.prefixo_rastreio || "-")}</dd>` : ""}
         </dl>
+        <button class="btn btn-outline-primary w-100 mt-3" type="button" id="editProductButton">Editar produto</button>
     `;
+    byId("editProductButton").addEventListener("click", openEditModal);
+    renderUnits(data.unidades || []);
     byId("historyRows").innerHTML = data.movimentacoes.map((mov) => `
         <tr><td>${formatDate(mov.data_hora)}</td><td>${escapeHtml(mov.tipo)}</td><td>${mov.quantidade}</td><td>${escapeHtml(mov.observacao || "")}</td></tr>
     `).join("") || `<tr><td colspan="4" class="text-secondary">Sem histórico.</td></tr>`;
     renderMoveLocationPicker();
+}
+
+function renderUnits(unidades) {
+    const card = byId("unitCard");
+    if (!card) return;
+    card.classList.toggle("d-none", product.tipo_controle !== "unidade");
+    if (product.tipo_controle !== "unidade") return;
+    byId("unitRows").innerHTML = unidades.map((unit) => `
+        <tr><td>${escapeHtml(unit.codigo_unidade)}</td><td>${escapeHtml(unit.status)}</td></tr>
+    `).join("") || `<tr><td colspan="2" class="text-secondary">Sem unidades.</td></tr>`;
+}
+
+function openEditModal() {
+    const form = byId("editProductForm");
+    ["nome", "categoria", "modelo", "codigo_barras", "estoque_minimo", "observacao"].forEach((field) => {
+        if (form.elements[field]) form.elements[field].value = product[field] ?? "";
+    });
+    editModal.show();
 }
 
 function shelfKey(loc) {
@@ -122,25 +147,39 @@ function movementPayload(form) {
     };
     if (data.tipo === "entrada") payload.recebido_por = data.recebido_por;
     if (data.tipo === "retirada") {
-        payload.entregue_por = data.entregue_por;
         payload.entregue_para = data.entregue_para;
         payload.destino = data.destino;
     }
     if (data.tipo === "emprestimo") {
-        payload.entregue_por = data.entregue_por;
         payload.emprestado_para = data.emprestado_para;
     }
     if (data.tipo === "descarte") {
-        payload.descartado_por = data.descartado_por;
         payload.motivo = data.motivo;
     }
     return { tipo: data.tipo, payload };
+}
+
+function validateMovement(tipo, payload) {
+    if (!Number(payload.quantidade) || Number(payload.quantidade) <= 0) {
+        return "Informe uma quantidade maior que zero.";
+    }
+    if (tipo === "retirada" && !payload.entregue_para) {
+        return "Informe quem recebeu o produto.";
+    }
+    if (tipo === "emprestimo" && !payload.emprestado_para) {
+        return "Informe para quem foi emprestado.";
+    }
+    if (tipo === "descarte" && !payload.motivo) {
+        return "Informe o motivo do descarte.";
+    }
+    return null;
 }
 
 (async function init() {
     await requireAuth();
     await loadLocations();
     await loadProduct();
+    editModal = new bootstrap.Modal(byId("editProductModal"));
     renderMovementFields();
 
     byId("movementTypeButtons").addEventListener("click", (event) => {
@@ -173,6 +212,12 @@ function movementPayload(form) {
         if (submit.disabled) return;
         submit.disabled = true;
         const { tipo, payload } = movementPayload(form);
+        const validationMessage = validateMovement(tipo, payload);
+        if (validationMessage) {
+            setAlert(validationMessage, "warning");
+            submit.disabled = false;
+            return;
+        }
         try {
             const { message } = await Api.post(`/api/movimentacoes/${tipo}`, payload);
             form.reset();
@@ -183,6 +228,18 @@ function movementPayload(form) {
             setAlert(error.message, "danger");
         } finally {
             submit.disabled = false;
+        }
+    });
+
+    byId("editProductForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+            const { message } = await Api.put(`/api/produtos/${product.id}`, formDataObject(event.currentTarget));
+            editModal.hide();
+            await loadProduct();
+            setAlert(message || "Produto atualizado.");
+        } catch (error) {
+            setAlert(error.message, "danger");
         }
     });
 

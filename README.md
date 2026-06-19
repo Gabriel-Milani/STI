@@ -66,7 +66,6 @@ POST /api/produtos
 {
   "nome": "Mouse Logitech M90",
   "categoria": "Mouse",
-  "marca": "Logitech",
   "modelo": "M90",
   "codigo_barras": "",
   "quantidade_inicial": 10,

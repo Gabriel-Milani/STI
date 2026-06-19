@@ -1,7 +1,15 @@
 from flask import Blueprint, request
 from ..database import get_db, rows_to_list
-from ..services.auth_utils import login_required, current_user_id
+from ..services.auth_utils import login_required, current_user_id, current_user_name
 from ..services.helpers import api_ok, api_error, parse_int, audit
+from ..services.unidades import (
+    attach_units_to_mov,
+    change_units_status,
+    create_units,
+    is_unit_product,
+    sync_product_quantity,
+    take_available_units,
+)
 
 movimentacoes_bp = Blueprint("movimentacoes", __name__)
 
@@ -15,7 +23,14 @@ def get_product(db, produto_id):
     return db.execute("SELECT * FROM produtos WHERE id = ? AND ativo = 1", (produto_id,)).fetchone()
 
 
+def actor_name():
+    return current_user_name() or "Usuário logado"
+
+
 def create_mov(db, produto, tipo, qtd, antes, depois, data):
+    origem = data.get("responsavel_origem") or data.get("entregue_por") or data.get("recebido_por") or data.get("descartado_por")
+    if not origem and tipo in ("entrada", "retirada", "emprestimo", "descarte"):
+        origem = actor_name()
     cur = db.execute(
         """
         INSERT INTO movimentacoes
@@ -26,7 +41,7 @@ def create_mov(db, produto, tipo, qtd, antes, depois, data):
         """,
         (
             produto["id"], tipo, qtd, antes, depois,
-            data.get("responsavel_origem") or data.get("entregue_por") or data.get("recebido_por") or data.get("descartado_por"),
+            origem,
             data.get("responsavel_destino") or data.get("entregue_para") or data.get("emprestado_para"),
             data.get("destino"), data.get("motivo"), data.get("observacao"),
             produto["localizacao_id"], produto["localizacao_id"], current_user_id()
@@ -73,9 +88,16 @@ def entrada():
             if not produto:
                 return rollback_error(db, "Produto não encontrado.", 404)
             antes = produto["quantidade_atual"]
-            depois = antes + qtd
-            db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
+            unidades = []
+            if is_unit_product(produto):
+                unidades = create_units(db, produto, qtd, data.get("observacao"))
+                depois = sync_product_quantity(db, produto_id)
+            else:
+                depois = antes + qtd
+                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
             mov_id = create_mov(db, produto, "entrada", qtd, antes, depois, data)
+            if unidades:
+                attach_units_to_mov(db, mov_id, unidades)
             audit(db, current_user_id(), "entrada", "produto", produto_id, f"+{qtd}")
             db.commit()
             return api_ok({"movimentacao_id": mov_id, "quantidade_atual": depois}, "Entrada registrada.")
@@ -92,8 +114,6 @@ def retirada():
     qtd = parse_int(data.get("quantidade"))
     if not produto_id or qtd <= 0:
         return api_error("Informe produto e quantidade maior que zero.", 400)
-    if not data.get("entregue_por"):
-        return api_error("Informe quem entregou.", 400)
     if not data.get("entregue_para"):
         return api_error("Informe para quem foi entregue.", 400)
     with get_db() as db:
@@ -105,9 +125,19 @@ def retirada():
             antes = produto["quantidade_atual"]
             if qtd > antes:
                 return rollback_error(db, "Não há estoque suficiente para essa retirada.", 409)
-            depois = antes - qtd
-            db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
+            unidades = []
+            if is_unit_product(produto):
+                selecionadas = take_available_units(db, produto_id, qtd)
+                if not selecionadas:
+                    return rollback_error(db, "Não há unidades disponíveis para essa retirada.", 409)
+                unidades = change_units_status(db, selecionadas, "retirado")
+                depois = sync_product_quantity(db, produto_id)
+            else:
+                depois = antes - qtd
+                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
             mov_id = create_mov(db, produto, "retirada", qtd, antes, depois, data)
+            if unidades:
+                attach_units_to_mov(db, mov_id, unidades)
             audit(db, current_user_id(), "retirada", "produto", produto_id, f"-{qtd}")
             db.commit()
             return api_ok({"movimentacao_id": mov_id, "quantidade_atual": depois}, "Retirada registrada.")
@@ -124,8 +154,6 @@ def descarte():
     qtd = parse_int(data.get("quantidade"))
     if not produto_id or qtd <= 0:
         return api_error("Informe produto e quantidade maior que zero.", 400)
-    if not data.get("descartado_por"):
-        return api_error("Informe quem descartou.", 400)
     if not data.get("motivo"):
         return api_error("Informe o motivo do descarte.", 400)
     with get_db() as db:
@@ -137,9 +165,19 @@ def descarte():
             antes = produto["quantidade_atual"]
             if qtd > antes:
                 return rollback_error(db, "Não há estoque suficiente para esse descarte.", 409)
-            depois = antes - qtd
-            db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
+            unidades = []
+            if is_unit_product(produto):
+                selecionadas = take_available_units(db, produto_id, qtd)
+                if not selecionadas:
+                    return rollback_error(db, "Não há unidades disponíveis para esse descarte.", 409)
+                unidades = change_units_status(db, selecionadas, "descartado")
+                depois = sync_product_quantity(db, produto_id)
+            else:
+                depois = antes - qtd
+                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
             mov_id = create_mov(db, produto, "descarte", qtd, antes, depois, data)
+            if unidades:
+                attach_units_to_mov(db, mov_id, unidades)
             audit(db, current_user_id(), "descarte", "produto", produto_id, f"-{qtd}")
             db.commit()
             return api_ok({"movimentacao_id": mov_id, "quantidade_atual": depois}, "Descarte registrado.")
@@ -156,8 +194,6 @@ def emprestimo():
     qtd = parse_int(data.get("quantidade"))
     if not produto_id or qtd <= 0:
         return api_error("Informe produto e quantidade maior que zero.", 400)
-    if not data.get("entregue_por"):
-        return api_error("Informe quem entregou.", 400)
     if not data.get("emprestado_para"):
         return api_error("Informe para quem foi emprestado.", 400)
     with get_db() as db:
@@ -169,16 +205,26 @@ def emprestimo():
             antes = produto["quantidade_atual"]
             if qtd > antes:
                 return rollback_error(db, "Não há estoque suficiente para esse empréstimo.", 409)
-            depois = antes - qtd
-            db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
+            unidades = []
+            if is_unit_product(produto):
+                selecionadas = take_available_units(db, produto_id, qtd)
+                if not selecionadas:
+                    return rollback_error(db, "Não há unidades disponíveis para esse empréstimo.", 409)
+                unidades = change_units_status(db, selecionadas, "emprestado")
+                depois = sync_product_quantity(db, produto_id)
+            else:
+                depois = antes - qtd
+                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
             mov_id = create_mov(db, produto, "emprestimo", qtd, antes, depois, data)
+            if unidades:
+                attach_units_to_mov(db, mov_id, unidades)
             emp_cur = db.execute(
                 """
                 INSERT INTO emprestimos
                 (produto_id, quantidade, entregue_por, emprestado_para, destino, observacao, status, movimentacao_emprestimo_id)
                 VALUES (?, ?, ?, ?, ?, ?, 'aberto', ?)
                 """,
-                (produto_id, qtd, data.get("entregue_por"), data.get("emprestado_para"), data.get("destino"), data.get("observacao"), mov_id),
+                (produto_id, qtd, data.get("entregue_por") or actor_name(), data.get("emprestado_para"), data.get("destino"), data.get("observacao"), mov_id),
             )
             audit(db, current_user_id(), "emprestimo", "produto", produto_id, f"-{qtd}")
             db.commit()

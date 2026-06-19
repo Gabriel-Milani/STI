@@ -30,9 +30,24 @@ def init_db(path: str = "estoque_v2.db"):
     Path(path).parent.mkdir(parents=True, exist_ok=True) if Path(path).parent != Path('.') else None
     with get_db() as db:
         db.executescript(SCHEMA)
+        ensure_schema_migrations(db)
         seed_default_user(db)
         seed_default_locations(db)
         db.commit()
+
+
+def column_exists(db, table, column):
+    return any(row["name"] == column for row in db.execute(f"PRAGMA table_info({table})").fetchall())
+
+
+def ensure_schema_migrations(db):
+    if column_exists(db, "produtos", "marca"):
+        db.execute("ALTER TABLE produtos DROP COLUMN marca")
+    if not column_exists(db, "produtos", "tipo_controle"):
+        db.execute("ALTER TABLE produtos ADD COLUMN tipo_controle TEXT NOT NULL DEFAULT 'quantidade'")
+    if not column_exists(db, "produtos", "prefixo_rastreio"):
+        db.execute("ALTER TABLE produtos ADD COLUMN prefixo_rastreio TEXT")
+    db.execute("UPDATE produtos SET tipo_controle = 'quantidade' WHERE tipo_controle IS NULL OR tipo_controle = ''")
 
 
 def seed_default_user(db):
@@ -130,13 +145,14 @@ CREATE TABLE IF NOT EXISTS produtos (
     codigo TEXT NOT NULL UNIQUE,
     nome TEXT NOT NULL,
     categoria TEXT,
-    marca TEXT,
     modelo TEXT,
     codigo_barras TEXT UNIQUE,
     quantidade_atual INTEGER NOT NULL DEFAULT 0,
     estoque_minimo INTEGER NOT NULL DEFAULT 0,
     localizacao_id INTEGER NOT NULL,
     observacao TEXT,
+    tipo_controle TEXT NOT NULL DEFAULT 'quantidade' CHECK(tipo_controle IN ('quantidade','unidade')),
+    prefixo_rastreio TEXT,
     ativo INTEGER NOT NULL DEFAULT 1,
     criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TEXT,
@@ -146,6 +162,21 @@ CREATE TABLE IF NOT EXISTS produtos (
 CREATE INDEX IF NOT EXISTS idx_produtos_nome ON produtos(nome);
 CREATE INDEX IF NOT EXISTS idx_produtos_codigo_barras ON produtos(codigo_barras);
 CREATE INDEX IF NOT EXISTS idx_produtos_localizacao ON produtos(localizacao_id);
+
+CREATE TABLE IF NOT EXISTS produto_unidades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    produto_id INTEGER NOT NULL,
+    codigo_unidade TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'disponivel' CHECK(status IN ('disponivel','retirado','emprestado','descartado')),
+    localizacao_id INTEGER NOT NULL,
+    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    observacao TEXT,
+    FOREIGN KEY (produto_id) REFERENCES produtos(id),
+    FOREIGN KEY (localizacao_id) REFERENCES localizacoes(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_unidades_produto_status ON produto_unidades(produto_id, status);
+CREATE INDEX IF NOT EXISTS idx_unidades_codigo ON produto_unidades(codigo_unidade);
 
 CREATE TABLE IF NOT EXISTS movimentacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,6 +202,19 @@ CREATE TABLE IF NOT EXISTS movimentacoes (
 
 CREATE INDEX IF NOT EXISTS idx_mov_produto ON movimentacoes(produto_id);
 CREATE INDEX IF NOT EXISTS idx_mov_data ON movimentacoes(data_hora);
+
+CREATE TABLE IF NOT EXISTS movimentacao_unidades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movimentacao_id INTEGER NOT NULL,
+    produto_unidade_id INTEGER NOT NULL,
+    codigo_unidade TEXT NOT NULL,
+    status_antes TEXT,
+    status_depois TEXT,
+    FOREIGN KEY (movimentacao_id) REFERENCES movimentacoes(id),
+    FOREIGN KEY (produto_unidade_id) REFERENCES produto_unidades(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mov_unidades_mov ON movimentacao_unidades(movimentacao_id);
 
 CREATE TABLE IF NOT EXISTS emprestimos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -7,7 +7,7 @@ from ..services.helpers import api_ok, api_error, generate_product_code, parse_i
 importacao_bp = Blueprint("importacao", __name__)
 
 EXPECTED_HEADERS = [
-    "nome", "categoria", "marca", "modelo", "codigo_barras",
+    "nome", "categoria", "modelo", "codigo_barras",
     "quantidade_inicial", "estoque_minimo", "localizacao_codigo", "observacao"
 ]
 
@@ -60,10 +60,10 @@ def importar_produtos():
                 cur = db.execute(
                     """
                     INSERT INTO produtos
-                    (codigo, nome, categoria, marca, modelo, codigo_barras, quantidade_atual, estoque_minimo, localizacao_id, observacao, ativo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    (codigo, nome, categoria, modelo, codigo_barras, quantidade_atual, estoque_minimo, localizacao_id, observacao, ativo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
-                    (codigo, nome, data.get("categoria"), data.get("marca"), data.get("modelo"), codigo_barras, qtd, minimo, loc["id"], data.get("observacao")),
+                    (codigo, nome, data.get("categoria"), data.get("modelo"), codigo_barras, qtd, minimo, loc["id"], data.get("observacao")),
                 )
                 if qtd > 0:
                     db.execute(

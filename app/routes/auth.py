@@ -20,6 +20,7 @@ def login():
             return api_error("Usuário ou senha inválidos.", 401)
         session["user_id"] = user["id"]
         session["username"] = user["username"]
+        session["nome"] = user["nome"]
         session["perfil"] = user["perfil"]
         return api_ok({"user": {"id": user["id"], "username": user["username"], "nome": user["nome"], "perfil": user["perfil"]}})
 

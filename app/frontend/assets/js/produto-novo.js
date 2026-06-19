@@ -45,6 +45,13 @@ async function loadLocations() {
     await requireAuth();
     await loadLocations();
 
+    byId("tipoControle").addEventListener("change", () => {
+        const unit = byId("tipoControle").value === "unidade";
+        byId("prefixoRastreio").disabled = !unit;
+        byId("prefixoRastreio").required = unit;
+        if (!unit) byId("prefixoRastreio").value = "";
+    });
+
     byId("shelfOptions").addEventListener("click", (event) => {
         const button = event.target.closest("[data-shelf]");
         if (!button) return;

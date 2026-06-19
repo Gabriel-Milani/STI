@@ -29,6 +29,8 @@ const Api = (() => {
     };
 })();
 
+let currentUser = null;
+
 function byId(id) {
     return document.getElementById(id);
 }
@@ -51,12 +53,25 @@ function escapeHtml(value) {
 }
 
 function setAlert(message, type = "success", targetId = "alert") {
-    const target = byId(targetId);
-    if (!target) return;
-    target.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
-        ${escapeHtml(message)}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    const cls = type === "danger" ? "danger" : type;
+    let container = byId("toastContainer");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toastContainer";
+        container.className = "toast-container position-fixed top-0 end-0 p-3";
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement("div");
+    toast.className = `toast align-items-center text-bg-${cls} border-0`;
+    toast.setAttribute("role", "alert");
+    toast.innerHTML = `<div class="d-flex">
+        <div class="toast-body">${escapeHtml(message)}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
     </div>`;
+    container.appendChild(toast);
+    const instance = new bootstrap.Toast(toast, { delay: 3500 });
+    toast.addEventListener("hidden.bs.toast", () => toast.remove());
+    instance.show();
 }
 
 function statusBadge(status) {
@@ -97,6 +112,7 @@ function pageCodeFromPath() {
 async function requireAuth() {
     try {
         const { data } = await Api.get("/api/auth/me");
+        currentUser = data.user;
         const userLabel = byId("userLabel");
         if (userLabel) userLabel.textContent = data.user.nome || data.user.username;
         return data.user;

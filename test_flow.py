@@ -9,7 +9,6 @@ print('login', r.status_code, r.json)
 r = client.post('/api/produtos', json={
     'nome': 'Mouse Logitech M90',
     'categoria': 'Mouse',
-    'marca': 'Logitech',
     'modelo': 'M90',
     'quantidade_inicial': 10,
     'estoque_minimo': 2,

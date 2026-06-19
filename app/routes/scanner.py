@@ -22,6 +22,26 @@ def buscar(codigo):
             p["localizacao_label"] = location_label(loc)
             return api_ok({"tipo": "produto", "produto": p})
 
+        unidade = db.execute(
+            """
+            SELECT u.*, p.nome AS produto_nome, p.codigo AS produto_codigo, p.codigo_barras, p.tipo_controle,
+                   l.codigo AS localizacao_codigo, l.nome AS localizacao_nome, l.armario, l.prateleira
+            FROM produto_unidades u
+            JOIN produtos p ON p.id = u.produto_id
+            JOIN localizacoes l ON l.id = u.localizacao_id
+            WHERE p.ativo = 1 AND u.codigo_unidade = ?
+            """,
+            (codigo,),
+        ).fetchone()
+        if unidade:
+            data = row_to_dict(unidade)
+            data["localizacao_label"] = location_label({
+                "armario": data["armario"],
+                "prateleira": data["prateleira"],
+                "nome": data["localizacao_nome"],
+            })
+            return api_ok({"tipo": "unidade", "unidade": data})
+
         loc = db.execute("SELECT * FROM localizacoes WHERE ativo = 1 AND codigo = ?", (codigo,)).fetchone()
         if loc:
             produtos = db.execute(

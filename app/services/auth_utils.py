@@ -6,6 +6,10 @@ def current_user_id():
     return session.get("user_id")
 
 
+def current_user_name():
+    return session.get("nome") or session.get("username")
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):

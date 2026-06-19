@@ -24,6 +24,19 @@ function renderLocation(localizacao, produtos) {
         </div></div>`;
 }
 
+function renderUnit(unidade) {
+    return `
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between gap-3">
+                <div>
+                    <h2 class="h4 mb-1"><a href="/produtos/${encodeURIComponent(unidade.produto_codigo)}">${escapeHtml(unidade.produto_nome)}</a></h2>
+                    <div class="text-secondary">${escapeHtml(unidade.codigo_unidade)} · ${escapeHtml(unidade.localizacao_label)}</div>
+                </div>
+                <div class="text-end"><div class="badge bg-secondary fs-6">${escapeHtml(unidade.status)}</div><div class="text-secondary small mt-2">unidade rastreável</div></div>
+            </div>
+        </div></div>`;
+}
+
 (async function init() {
     await requireAuth();
     byId("scanForm").addEventListener("submit", async (event) => {
@@ -33,7 +46,9 @@ function renderLocation(localizacao, produtos) {
             const { data } = await Api.get(`/api/scanner/buscar/${encodeURIComponent(codigo)}`);
             byId("scanResult").innerHTML = data.tipo === "produto"
                 ? renderProduct(data.produto)
-                : renderLocation(data.localizacao, data.produtos);
+                : data.tipo === "unidade"
+                    ? renderUnit(data.unidade)
+                    : renderLocation(data.localizacao, data.produtos);
         } catch (error) {
             byId("scanResult").innerHTML = "";
             setAlert(error.message, "danger");
