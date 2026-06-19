@@ -1,8 +1,11 @@
 .env
+.venv/
+venv/
+instance/
 *.db
 *.sqlite
+*.sqlite3
 __pycache__/
 *.pyc
 backups/*.db
 .vscode/
-.venv/

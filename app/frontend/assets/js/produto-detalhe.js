@@ -46,6 +46,14 @@ function renderMovementFields() {
     });
 }
 
+function applyActionFromQuery() {
+    const action = new URLSearchParams(window.location.search).get("acao");
+    if (!["entrada", "retirada", "emprestimo", "descarte"].includes(action)) return;
+    byId("movementType").value = action;
+    renderMovementFields();
+    byId("movementForm").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function clearAlert() {
     const target = byId("alert");
     if (target) target.innerHTML = "";
@@ -88,6 +96,7 @@ async function loadProduct() {
             mov.responsavel_destino ? `Para: ${mov.responsavel_destino}` : "",
             mov.destino ? `Destino: ${mov.destino}` : "",
             mov.motivo ? `Motivo: ${mov.motivo}` : "",
+            mov.unidades_codigos ? `Unidades: ${mov.unidades_codigos}` : "",
             mov.observacao || "",
         ].filter(Boolean).join(" · ");
         return `
@@ -201,6 +210,7 @@ function validateMovement(tipo, payload) {
     await loadProduct();
     editModal = new bootstrap.Modal(byId("editProductModal"));
     renderMovementFields();
+    applyActionFromQuery();
 
     byId("movementTypeButtons").addEventListener("click", (event) => {
         const button = event.target.closest("[data-movement-type]");

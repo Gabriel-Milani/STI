@@ -21,7 +21,16 @@ def current_user_name():
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
+        user_id = session.get("user_id")
+        if not user_id:
             return jsonify({"ok": False, "error": "Autenticação obrigatória."}), 401
+        with get_db() as db:
+            user = db.execute("SELECT id, nome, username, ativo FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+            if not user or not user["ativo"]:
+                session.clear()
+                return jsonify({"ok": False, "error": "Usuário inativo. Procure o responsável pelo sistema."}), 403
+            session["nome"] = user["nome"]
+            session["username"] = user["username"]
+            session["usuario_id"] = user["id"]
         return fn(*args, **kwargs)
     return wrapper

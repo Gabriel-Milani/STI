@@ -72,7 +72,15 @@ def test_unidade():
     assert [u["codigo_unidade"] for u in detalhe["unidades"]] == ["0300-1", "0300-2"]
 
     assert_ok(client.post("/api/movimentacoes/entrada", json={"produto_id": produto_id, "quantidade": 1}))
+    detalhe = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]
+    assert [u["codigo_unidade"] for u in detalhe["unidades"]] == ["0300-1", "0300-2", "0300-3"]
     assert_ok(client.post("/api/movimentacoes/retirada", json={"produto_id": produto_id, "quantidade": 1, "entregue_para": "Maria"}))
+    detalhe = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]
+    assert detalhe["unidades"][0]["status"] == "retirado"
+    antes_mover = detalhe["produto"]["quantidade_atual"]
+    assert_ok(client.post(f"/api/produtos/{produto_id}/mover", json={"localizacao_codigo": "ARM01-P4-ADAPTADORES"}))
+    depois_mover = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]["produto"]["quantidade_atual"]
+    assert depois_mover == antes_mover
     scan = assert_ok(client.get("/api/scanner/buscar/0300-1"))["data"]
     assert scan["tipo"] == "unidade"
     assert scan["unidade"]["status"] == "retirado"
@@ -112,6 +120,11 @@ def test_usuarios():
     assert_error(client.post("/api/auth/login", json={"username": "joao", "password": "1234"}), 403)
     assert_ok(client.post("/api/auth/login", json={"username": "admin", "password": "admin123"}))
     assert_ok(client.post(f"/api/usuarios/{joao_id}/resetar-senha", json={"senha": "5678", "confirmar_senha": "5678"}))
+    assert_ok(client.post(f"/api/usuarios/{joao_id}/ativar", json={}))
+    joao_client = app.test_client()
+    assert_ok(joao_client.post("/api/auth/login", json={"username": "joao", "password": "5678"}))
+    assert_ok(client.post(f"/api/usuarios/{joao_id}/desativar", json={}))
+    assert_error(joao_client.get("/api/produtos"), 403)
     assert_ok(client.post(f"/api/usuarios/{joao_id}/ativar", json={}))
     assert_ok(client.post("/api/auth/login", json={"username": "joao", "password": "5678"}))
 

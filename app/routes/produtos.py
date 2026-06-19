@@ -240,46 +240,54 @@ def mover(produto_id):
     destino_codigo = data.get("localizacao_codigo")
     destino_id = data.get("localizacao_id")
     with get_db() as db:
-        produto = db.execute("SELECT * FROM produtos WHERE id = ? AND ativo = 1", (produto_id,)).fetchone()
-        if not produto:
-            return api_error("Produto não encontrado.", 404)
-        if destino_id:
-            destino = db.execute("SELECT * FROM localizacoes WHERE id = ? AND ativo = 1", (destino_id,)).fetchone()
-        elif destino_codigo:
-            destino = db.execute("SELECT * FROM localizacoes WHERE codigo = ? AND ativo = 1", (destino_codigo,)).fetchone()
-        else:
-            destino = None
-        if not destino:
-            return api_error("Escolha uma localização de destino válida.", 400)
-        origem_id = produto["localizacao_id"]
-        if origem_id == destino["id"]:
-            return api_error("O produto já está nessa localização.", 400)
-        db.execute("UPDATE produtos SET localizacao_id = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (destino["id"], produto_id))
-        if is_unit_product(produto):
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            produto = db.execute("SELECT * FROM produtos WHERE id = ? AND ativo = 1", (produto_id,)).fetchone()
+            if not produto:
+                db.rollback()
+                return api_error("Produto não encontrado.", 404)
+            if destino_id:
+                destino = db.execute("SELECT * FROM localizacoes WHERE id = ? AND ativo = 1", (destino_id,)).fetchone()
+            elif destino_codigo:
+                destino = db.execute("SELECT * FROM localizacoes WHERE codigo = ? AND ativo = 1", (destino_codigo,)).fetchone()
+            else:
+                destino = None
+            if not destino:
+                db.rollback()
+                return api_error("Escolha uma localização de destino válida.", 400)
+            origem_id = produto["localizacao_id"]
+            if origem_id == destino["id"]:
+                db.rollback()
+                return api_error("O produto já está nessa localização.", 400)
+            db.execute("UPDATE produtos SET localizacao_id = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (destino["id"], produto_id))
+            if is_unit_product(produto):
+                db.execute(
+                    "UPDATE produto_unidades SET localizacao_id = ? WHERE produto_id = ? AND status = 'disponivel'",
+                    (destino["id"], produto_id),
+                )
             db.execute(
-                "UPDATE produto_unidades SET localizacao_id = ? WHERE produto_id = ? AND status = 'disponivel'",
-                (destino["id"], produto_id),
+                """
+                INSERT INTO movimentacoes
+                (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, observacao,
+                 localizacao_origem_id, localizacao_destino_id, usuario_id)
+                VALUES (?, 'mover', 0, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    produto_id,
+                    produto["quantidade_atual"],
+                    produto["quantidade_atual"],
+                    data.get("observacao"),
+                    origem_id,
+                    destino["id"],
+                    current_user_id(),
+                ),
             )
-        db.execute(
-            """
-            INSERT INTO movimentacoes
-            (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, observacao,
-             localizacao_origem_id, localizacao_destino_id, usuario_id)
-            VALUES (?, 'mover', 0, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                produto_id,
-                produto["quantidade_atual"],
-                produto["quantidade_atual"],
-                data.get("observacao"),
-                origem_id,
-                destino["id"],
-                current_user_id(),
-            ),
-        )
-        audit(db, current_user_id(), "mover", "produto", produto_id, f"{origem_id} -> {destino['id']}")
-        db.commit()
-        return api_ok(message="Produto movido.")
+            audit(db, current_user_id(), "mover", "produto", produto_id, f"{origem_id} -> {destino['id']}")
+            db.commit()
+            return api_ok(message="Produto movido.")
+        except Exception:
+            db.rollback()
+            return api_error("Não foi possível mover o produto.", 500)
 
 
 @produtos_bp.delete("/<int:produto_id>")
