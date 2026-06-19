@@ -9,16 +9,22 @@
 </head>
 <body class="products-page">
 <div class="container-fluid app-shell"><div class="row">
-    <aside class="col-md-3 col-lg-2 sidebar p-3"><div class="text-white fw-semibold mb-3">Estoque TI</div><nav id="appNav" class="nav flex-column"></nav></aside>
+    <aside class="col-md-3 col-lg-2 sidebar p-3">
+        <div class="sidebar-brand mb-3">
+            <div class="text-white fw-semibold">Estoque TI</div>
+            <div class="sidebar-brand-sub">STI Ops</div>
+        </div>
+        <nav id="appNav" class="nav flex-column"></nav>
+    </aside>
     <main class="col-md-9 col-lg-10 p-3 p-lg-4"><div class="content-wrap mx-auto">
         <div class="products-hero mb-4">
             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                 <div>
-                    <div class="pixel-kicker">Catálogo STI</div>
-                    <h1 class="display-title mb-1">Produtos</h1>
+                    <div class="pixel-kicker">Catálogo Operacional STI</div>
+                    <h1 class="display-title mb-1">PRODUTOS</h1>
                     <div class="products-subtitle">Encontre, confira e movimente itens do estoque com leitura rápida.</div>
                 </div>
-                <div class="d-flex gap-2 align-items-center"><a class="btn btn-light btn-sm hero-action" href="/produtos/novo">Novo produto</a><span id="userLabel" class="text-white-50 small align-self-center"></span><button class="btn btn-outline-light btn-sm" data-logout>Sair</button></div>
+                <div class="d-flex gap-2 align-items-center"><a class="btn hero-action" href="/produtos/novo">+ Novo produto</a><span id="userLabel" class="text-white-50 small align-self-center"></span><button class="btn hero-logout" data-logout>Sair</button></div>
             </div>
         </div>
         <div id="alert"></div>
@@ -36,6 +42,7 @@
                 <button class="filter-chip" type="button" data-filter="unidade">Unidade rastreável</button>
             </div>
         </section>
+        <section class="catalog-metrics mb-4" id="catalogMetrics"></section>
         <section>
             <div class="catalog-toolbar mb-3">
                 <div><span id="productCount" class="fw-semibold">0</span> itens encontrados</div>

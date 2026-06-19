@@ -2,6 +2,7 @@ mountNav("produtos");
 
 let products = [];
 let activeFilter = "todos";
+let activeLocationsCount = 0;
 
 const categoryIcons = [
     ["mouse", "▣"],
@@ -56,9 +57,28 @@ function renderEmpty() {
         <div class="catalog-empty">
             <div class="empty-pixel">◇</div>
             <h2 class="h5 mb-1">Nenhum produto encontrado</h2>
-            <div class="text-secondary">Ajuste a busca ou experimente outro filtro.</div>
+            <div class="text-secondary mb-3">Tente outro filtro ou cadastre um novo item.</div>
+            <a class="btn catalog-new-empty" href="/produtos/novo">Novo produto</a>
         </div>
     `;
+}
+
+function renderMetrics() {
+    const metrics = [
+        { label: "Total de produtos", value: products.length, icon: "▦" },
+        { label: "Estoque baixo", value: products.filter((p) => p.status === "baixo").length, icon: "▧" },
+        { label: "Unidades rastreáveis", value: products.filter((p) => p.tipo_controle === "unidade").length, icon: "◇" },
+        { label: "Localizações ativas", value: activeLocationsCount, icon: "⌁" },
+    ];
+    byId("catalogMetrics").innerHTML = metrics.map((metric) => `
+        <div class="catalog-metric">
+            <div class="metric-pixel">${metric.icon}</div>
+            <div>
+                <div class="metric-value">${metric.value}</div>
+                <div class="metric-label">${escapeHtml(metric.label)}</div>
+            </div>
+        </div>
+    `).join("");
 }
 
 function renderCard(produto) {
@@ -96,6 +116,7 @@ function renderCard(produto) {
 function renderProducts() {
     const visible = products.filter(productMatchesFilter);
     byId("productCount").textContent = visible.length;
+    renderMetrics();
     byId("productGrid").innerHTML = visible.length ? visible.map(renderCard).join("") : renderEmpty();
 }
 
@@ -107,6 +128,12 @@ async function loadProducts(query = "") {
 
 (async function init() {
     await requireAuth();
+    try {
+        const { data } = await Api.get("/api/localizacoes");
+        activeLocationsCount = data.localizacoes.length;
+    } catch (_error) {
+        activeLocationsCount = 0;
+    }
     await loadProducts();
     const toast = sessionStorage.getItem("productToast");
     if (toast) {
