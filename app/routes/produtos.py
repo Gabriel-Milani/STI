@@ -1,13 +1,8 @@
 from flask import Blueprint, request
 from ..database import get_db, rows_to_list, row_to_dict
 from ..services.auth_utils import login_required, current_user_id, current_user_name
-<<<<<<< HEAD
-from ..services.helpers import api_ok, api_error, generate_product_code, parse_int, audit, location_label
-from ..services.unidades import create_units, is_unit_product, sync_product_quantity
-=======
 from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit, location_label
-from ..services.unit_control import create_units, is_unit_product, record_movement_units, sync_unit_stock
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+from ..services.unidades import attach_units_to_mov, create_units, is_unit_product, sync_product_quantity
 
 produtos_bp = Blueprint("produtos", __name__)
 
@@ -18,7 +13,6 @@ def produto_payload(row, loc=None):
     if loc:
         data["localizacao"] = row_to_dict(loc)
         data["localizacao_label"] = location_label(loc)
-    data["tipo_controle"] = data.get("tipo_controle") or "quantidade"
     data["status"] = "baixo" if data["quantidade_atual"] <= data["estoque_minimo"] and data["quantidade_atual"] > 0 else "ok"
     if data["quantidade_atual"] == 0:
         data["status"] = "zerado"
@@ -35,20 +29,12 @@ def listar():
     where = ["p.ativo = 1"]
     if q:
         where.append("""(
-<<<<<<< HEAD
             p.nome LIKE ? OR p.categoria LIKE ? OR p.modelo LIKE ?
-            OR p.codigo LIKE ? OR p.codigo_barras LIKE ? OR l.codigo LIKE ? OR l.nome LIKE ?
+            OR p.codigo LIKE ? OR p.codigo_barras LIKE ? OR l.nome LIKE ?
+            OR l.codigo LIKE ? OR l.armario LIKE ? OR l.prateleira LIKE ?
         )""")
         like = f"%{q}%"
-        params += [like, like, like, like, like, like, like]
-=======
-            p.nome LIKE ? OR p.categoria LIKE ? OR p.marca LIKE ? OR p.modelo LIKE ?
-            OR p.codigo LIKE ? OR p.codigo_barras LIKE ? OR l.nome LIKE ? OR l.codigo LIKE ?
-            OR l.armario LIKE ? OR l.prateleira LIKE ?
-        )""")
-        like = f"%{q}%"
-        params += [like] * 10
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+        params += [like] * 9
     if localizacao:
         where.append("l.codigo = ?")
         params.append(localizacao)
@@ -66,13 +52,13 @@ def listar():
         rows = rows_to_list(db.execute(sql, params).fetchall())
         for r in rows:
             r["localizacao_label"] = f"{r['armario']} > {r['prateleira']} > {r['localizacao_nome']}"
+            r["tipo_controle"] = r.get("tipo_controle") or "quantidade"
             if r["quantidade_atual"] == 0:
                 r["status"] = "zerado"
             elif r["quantidade_atual"] <= r["estoque_minimo"]:
                 r["status"] = "baixo"
             else:
                 r["status"] = "ok"
-            r["tipo_controle"] = r.get("tipo_controle") or "quantidade"
         return api_ok({"produtos": rows})
 
 
@@ -83,30 +69,22 @@ def criar():
     nome = (data.get("nome") or "").strip()
     if not nome:
         return api_error("Informe o nome do produto.", 400)
-    loc_id = data.get("localizacao_id")
-    loc_codigo = data.get("localizacao_codigo")
     quantidade = parse_int(data.get("quantidade_inicial", data.get("quantidade_atual", 0)))
     minimo = parse_int(data.get("estoque_minimo", 0))
     tipo_controle = data.get("tipo_controle") or "quantidade"
-<<<<<<< HEAD
     prefixo_rastreio = (data.get("prefixo_rastreio") or "").strip() or None
     if tipo_controle not in ("quantidade", "unidade"):
         return api_error("Tipo de controle inválido.", 400)
     if tipo_controle == "unidade" and not prefixo_rastreio:
         return api_error("Informe o prefixo de rastreio.", 400)
-=======
-    if tipo_controle not in ("quantidade", "unidade"):
-        return api_error("Tipo de controle inválido.", 400)
-    prefixo_rastreio = (data.get("prefixo_rastreio") or "").strip() or None
-    if tipo_controle == "unidade" and not prefixo_rastreio:
-        return api_error("Informe o prefixo de rastreio para produto por unidade.", 400)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     if quantidade < 0:
         return api_error("Quantidade inicial não pode ser negativa.", 400)
     if minimo < 0:
         return api_error("Estoque mínimo não pode ser negativo.", 400)
 
     with get_db() as db:
+        loc_id = data.get("localizacao_id")
+        loc_codigo = data.get("localizacao_codigo")
         if loc_id:
             loc = db.execute("SELECT * FROM localizacoes WHERE id = ? AND ativo = 1", (loc_id,)).fetchone()
         elif loc_codigo:
@@ -122,13 +100,9 @@ def criar():
             cur = db.execute(
                 """
                 INSERT INTO produtos
-<<<<<<< HEAD
-                (codigo, nome, categoria, modelo, codigo_barras, quantidade_atual, estoque_minimo, localizacao_id, observacao, tipo_controle, prefixo_rastreio, ativo)
+                (codigo, nome, categoria, modelo, codigo_barras, quantidade_atual, estoque_minimo,
+                 tipo_controle, prefixo_rastreio, localizacao_id, observacao, ativo)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-=======
-                (codigo, nome, categoria, marca, modelo, codigo_barras, quantidade_atual, estoque_minimo, tipo_controle, prefixo_rastreio, localizacao_id, observacao, ativo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
                 """,
                 (
                     codigo,
@@ -142,55 +116,42 @@ def criar():
                     prefixo_rastreio,
                     loc["id"],
                     data.get("observacao"),
-                    tipo_controle,
-                    prefixo_rastreio,
                 ),
             )
             produto_id = cur.lastrowid
-<<<<<<< HEAD
-            produto = db.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,)).fetchone()
-            unidades_criadas = []
-            if tipo_controle == "unidade" and quantidade > 0:
-                unidades_criadas = create_units(db, produto, quantidade, "Quantidade inicial")
-                quantidade = sync_product_quantity(db, produto_id)
-            if quantidade > 0:
-                mov = db.execute(
-=======
-            unidades_codigos = None
+            unidades = []
             if tipo_controle == "unidade" and quantidade > 0:
                 produto = db.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,)).fetchone()
-                unidades_codigos = create_units(db, produto, quantidade, "Quantidade inicial")
-                sync_unit_stock(db, produto_id)
+                unidades = create_units(db, produto, quantidade, "Quantidade inicial")
+                quantidade_depois = sync_product_quantity(db, produto_id)
+            else:
+                quantidade_depois = quantidade
             if quantidade > 0:
-                mov_cur = db.execute(
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+                mov = db.execute(
                     """
                     INSERT INTO movimentacoes
-                    (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, responsavel_origem, observacao, unidades_codigos, localizacao_destino_id, usuario_id)
+                    (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, responsavel_origem,
+                     observacao, unidades_codigos, localizacao_destino_id, usuario_id)
                     VALUES (?, 'entrada', ?, 0, ?, ?, ?, ?, ?, ?)
                     """,
-<<<<<<< HEAD
-                    (produto_id, quantidade, quantidade, data.get("recebido_por") or data.get("operador") or current_user_name(), "Quantidade inicial", loc["id"], current_user_id()),
+                    (
+                        produto_id,
+                        quantidade,
+                        quantidade_depois,
+                        data.get("recebido_por") or data.get("operador") or current_user_name(),
+                        "Quantidade inicial",
+                        ",".join([u["codigo_unidade"] for u in unidades]) if unidades else None,
+                        loc["id"],
+                        current_user_id(),
+                    ),
                 )
-                if unidades_criadas:
-                    for unidade in unidades_criadas:
-                        db.execute(
-                            """
-                            INSERT INTO movimentacao_unidades
-                            (movimentacao_id, produto_unidade_id, codigo_unidade, status_antes, status_depois)
-                            VALUES (?, ?, ?, ?, ?)
-                            """,
-                            (mov.lastrowid, unidade["id"], unidade["codigo_unidade"], unidade["status_antes"], unidade["status_depois"]),
-                        )
-=======
-                    (produto_id, quantidade, quantidade, current_user_name() or data.get("recebido_por") or data.get("operador"), "Quantidade inicial", ",".join(unidades_codigos) if unidades_codigos else None, loc["id"], current_user_id()),
-                )
-                record_movement_units(db, mov_cur.lastrowid, unidades_codigos, "disponivel")
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+                if unidades:
+                    attach_units_to_mov(db, mov.lastrowid, unidades)
             audit(db, current_user_id(), "criar", "produto", produto_id, codigo)
             db.commit()
             return api_ok({"id": produto_id, "codigo": codigo}, "Produto cadastrado.", 201)
         except Exception:
+            db.rollback()
             return api_error("Não foi possível cadastrar. Verifique código interno/código de barras duplicado.", 400)
 
 
@@ -213,21 +174,16 @@ def detalhe(codigo_ou_id):
             "SELECT * FROM emprestimos WHERE produto_id = ? AND status = 'aberto' ORDER BY data_emprestimo DESC",
             (produto["id"],),
         ).fetchall()
-<<<<<<< HEAD
         unidades = db.execute(
             "SELECT * FROM produto_unidades WHERE produto_id = ? ORDER BY id",
             (produto["id"],),
         ).fetchall()
-        return api_ok({"produto": produto_payload(produto, loc), "movimentacoes": rows_to_list(movs), "emprestimos_abertos": rows_to_list(emp), "unidades": rows_to_list(unidades)})
-=======
-        unidades = []
-        if is_unit_product(produto):
-            unidades = rows_to_list(db.execute(
-                "SELECT * FROM produto_unidades WHERE produto_id = ? ORDER BY id",
-                (produto["id"],),
-            ).fetchall())
-        return api_ok({"produto": produto_payload(produto, loc), "movimentacoes": rows_to_list(movs), "emprestimos_abertos": rows_to_list(emp), "unidades": unidades})
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+        return api_ok({
+            "produto": produto_payload(produto, loc),
+            "movimentacoes": rows_to_list(movs),
+            "emprestimos_abertos": rows_to_list(emp),
+            "unidades": rows_to_list(unidades),
+        })
 
 
 @produtos_bp.put("/<int:produto_id>")
@@ -252,12 +208,21 @@ def atualizar(produto_id):
                 SET nome=?, categoria=?, modelo=?, codigo_barras=?, estoque_minimo=?, observacao=?, atualizado_em=CURRENT_TIMESTAMP
                 WHERE id=?
                 """,
-                (nome, data.get("categoria", produto["categoria"]), data.get("modelo", produto["modelo"]), codigo_barras, minimo, data.get("observacao", produto["observacao"]), produto_id),
+                (
+                    nome,
+                    data.get("categoria", produto["categoria"]),
+                    data.get("modelo", produto["modelo"]),
+                    codigo_barras,
+                    minimo,
+                    data.get("observacao", produto["observacao"]),
+                    produto_id,
+                ),
             )
             audit(db, current_user_id(), "editar", "produto", produto_id, produto["codigo"])
             db.commit()
             return api_ok(message="Produto atualizado.")
         except Exception:
+            db.rollback()
             return api_error("Não foi possível atualizar. Verifique código de barras duplicado.", 400)
 
 
@@ -291,10 +256,19 @@ def mover(produto_id):
         db.execute(
             """
             INSERT INTO movimentacoes
-            (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, observacao, localizacao_origem_id, localizacao_destino_id, usuario_id)
+            (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, observacao,
+             localizacao_origem_id, localizacao_destino_id, usuario_id)
             VALUES (?, 'mover', 0, ?, ?, ?, ?, ?, ?)
             """,
-            (produto_id, produto["quantidade_atual"], produto["quantidade_atual"], data.get("observacao"), origem_id, destino["id"], current_user_id()),
+            (
+                produto_id,
+                produto["quantidade_atual"],
+                produto["quantidade_atual"],
+                data.get("observacao"),
+                origem_id,
+                destino["id"],
+                current_user_id(),
+            ),
         )
         audit(db, current_user_id(), "mover", "produto", produto_id, f"{origem_id} -> {destino['id']}")
         db.commit()

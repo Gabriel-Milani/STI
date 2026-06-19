@@ -3,64 +3,37 @@ mountNav("produtos");
 let product = null;
 let locations = [];
 let selectedMoveShelf = "";
-<<<<<<< HEAD
 let editModal = null;
-=======
-let currentUser = null;
-let editModal = null;
-let deleteModal = null;
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
 
 const movementFields = {
     entrada: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-<<<<<<< HEAD
         <div class="col-md-5"><input class="form-control" value="Recebido por: usuário logado" disabled></div>
-=======
-        <div class="col-md-5"><input class="form-control" name="responsavel_visual" placeholder="Recebido por" readonly></div>
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
     retirada: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-<<<<<<< HEAD
         <div class="col-md-4"><input class="form-control" value="Entregue por: usuário logado" disabled></div>
         <div class="col-md-5"><input class="form-control" name="entregue_para" placeholder="Entregue para" required></div>
-=======
-        <div class="col-md-4"><input class="form-control" name="responsavel_visual" placeholder="Entregue por" readonly></div>
-        <div class="col-md-5"><input class="form-control" name="entregue_para" placeholder="Entregue para"></div>
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
         <div class="col-md-6"><input class="form-control" name="destino" placeholder="Destino"></div>
         <div class="col-md-6"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
     emprestimo: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-<<<<<<< HEAD
         <div class="col-md-4"><input class="form-control" value="Entregue por: usuário logado" disabled></div>
         <div class="col-md-5"><input class="form-control" name="emprestado_para" placeholder="Emprestado para" required></div>
-=======
-        <div class="col-md-4"><input class="form-control" name="responsavel_visual" placeholder="Entregue por" readonly></div>
-        <div class="col-md-5"><input class="form-control" name="emprestado_para" placeholder="Emprestado para"></div>
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
     descarte: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-<<<<<<< HEAD
         <div class="col-md-4"><input class="form-control" value="Descartado por: usuário logado" disabled></div>
         <div class="col-md-5"><input class="form-control" name="motivo" placeholder="Motivo" required></div>
-=======
-        <div class="col-md-4"><input class="form-control" name="responsavel_visual" placeholder="Descartado por" readonly></div>
-        <div class="col-md-5"><input class="form-control" name="motivo" placeholder="Motivo"></div>
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
 };
 
 function renderMovementFields() {
     byId("movementFields").innerHTML = movementFields[byId("movementType").value] || "";
-    const responsible = byId("movementFields").querySelector("[name='responsavel_visual']");
-    if (responsible) responsible.value = currentUser?.nome || currentUser?.username || "";
     byId("movementTypeButtons").querySelectorAll("[data-movement-type]").forEach((button) => {
         button.classList.toggle("active", button.dataset.movementType === byId("movementType").value);
     });
@@ -91,9 +64,7 @@ async function loadProduct() {
             <img class="qr-img border rounded" src="/api/etiquetas/produto/${product.id}/qr.png" alt="QR Code do produto">
         </div>
         <dl class="row mb-0">
-            <dt class="col-5">Controle</dt><dd class="col-7">${product.tipo_controle === "unidade" ? "Unidade" : "Quantidade"}</dd>
             <dt class="col-5">Quantidade</dt><dd class="col-7">${product.quantidade_atual}</dd>
-            ${product.tipo_controle === "unidade" ? `<dt class="col-5">Prefixo</dt><dd class="col-7">${escapeHtml(product.prefixo_rastreio || "-")}</dd>` : ""}
             <dt class="col-5">Mínimo</dt><dd class="col-7">${product.estoque_minimo}</dd>
             <dt class="col-5">Categoria</dt><dd class="col-7">${escapeHtml(product.categoria || "-")}</dd>
             <dt class="col-5">Modelo</dt><dd class="col-7">${escapeHtml(product.modelo || "-")}</dd>
@@ -103,25 +74,14 @@ async function loadProduct() {
         </dl>
         <button class="btn btn-outline-primary w-100 mt-3" type="button" id="editProductButton">Editar produto</button>
     `;
-<<<<<<< HEAD
     byId("editProductButton").addEventListener("click", openEditModal);
     renderUnits(data.unidades || []);
-=======
-    byId("currentLocationLabel").textContent = product.localizacao_label || "";
-    byId("currentLocationCode").textContent = `Código: ${product.localizacao?.codigo || "-"}`;
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     byId("historyRows").innerHTML = data.movimentacoes.map((mov) => `
-        <tr><td>${formatDate(mov.data_hora)}</td><td>${escapeHtml(mov.tipo)}</td><td>${mov.quantidade}</td><td>${escapeHtml([mov.observacao, mov.unidades_codigos ? `Unidades: ${mov.unidades_codigos}` : ""].filter(Boolean).join(" · "))}</td></tr>
+        <tr><td>${formatDate(mov.data_hora)}</td><td>${escapeHtml(mov.tipo)}</td><td>${mov.quantidade}</td><td>${escapeHtml(mov.observacao || "")}</td></tr>
     `).join("") || `<tr><td colspan="4" class="text-secondary">Sem histórico.</td></tr>`;
-    const unitCard = byId("unitCard");
-    unitCard.classList.toggle("d-none", product.tipo_controle !== "unidade");
-    byId("unitRows").innerHTML = (data.unidades || []).map((unit) => `
-        <tr><td class="fw-semibold">${escapeHtml(unit.codigo_unidade)}</td><td>${escapeHtml(unit.status)}</td></tr>
-    `).join("") || `<tr><td colspan="2" class="text-secondary">Nenhuma unidade cadastrada.</td></tr>`;
     renderMoveLocationPicker();
 }
 
-<<<<<<< HEAD
 function renderUnits(unidades) {
     const card = byId("unitCard");
     if (!card) return;
@@ -138,13 +98,6 @@ function openEditModal() {
         if (form.elements[field]) form.elements[field].value = product[field] ?? "";
     });
     editModal.show();
-=======
-function fillEditForm() {
-    const form = byId("editProductForm");
-    ["nome", "categoria", "marca", "modelo", "codigo_barras", "estoque_minimo", "observacao"].forEach((name) => {
-        form.elements[name].value = product[name] || "";
-    });
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
 }
 
 function shelfKey(loc) {
@@ -192,7 +145,6 @@ function movementPayload(form) {
         quantidade: data.quantidade,
         observacao: data.observacao,
     };
-    if (data.tipo === "entrada") payload.recebido_por = data.recebido_por;
     if (data.tipo === "retirada") {
         payload.entregue_para = data.entregue_para;
         payload.destino = data.destino;
@@ -207,7 +159,6 @@ function movementPayload(form) {
 }
 
 function validateMovement(tipo, payload) {
-<<<<<<< HEAD
     if (!Number(payload.quantidade) || Number(payload.quantidade) <= 0) {
         return "Informe uma quantidade maior que zero.";
     }
@@ -220,19 +171,11 @@ function validateMovement(tipo, payload) {
     if (tipo === "descarte" && !payload.motivo) {
         return "Informe o motivo do descarte.";
     }
-=======
-    if (!payload.quantidade || Number(payload.quantidade) <= 0) return "Informe a quantidade.";
-    if (tipo === "retirada" && !payload.entregue_para) return "Informe quem recebeu o produto.";
-    if (tipo === "emprestimo" && !payload.emprestado_para) return "Informe para quem foi emprestado.";
-    if (tipo === "descarte" && !payload.motivo) return "Informe o motivo do descarte.";
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     return null;
 }
 
 (async function init() {
-    currentUser = await requireAuth();
-    editModal = new bootstrap.Modal(byId("editProductModal"));
-    deleteModal = new bootstrap.Modal(byId("deleteProductModal"));
+    await requireAuth();
     await loadLocations();
     await loadProduct();
     editModal = new bootstrap.Modal(byId("editProductModal"));
@@ -268,15 +211,9 @@ function validateMovement(tipo, payload) {
         if (submit.disabled) return;
         submit.disabled = true;
         const { tipo, payload } = movementPayload(form);
-<<<<<<< HEAD
         const validationMessage = validateMovement(tipo, payload);
         if (validationMessage) {
             setAlert(validationMessage, "warning");
-=======
-        const validation = validateMovement(tipo, payload);
-        if (validation) {
-            setAlert(validation, "warning");
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
             submit.disabled = false;
             return;
         }
@@ -293,37 +230,6 @@ function validateMovement(tipo, payload) {
         }
     });
 
-<<<<<<< HEAD
-=======
-    byId("editProductButton").addEventListener("click", () => {
-        fillEditForm();
-        editModal.show();
-    });
-
-    byId("deleteProductButton").addEventListener("click", () => {
-        byId("deleteProductName").textContent = product.nome;
-        byId("deleteProductCode").textContent = product.codigo;
-        deleteModal.show();
-    });
-
-    byId("confirmDeleteProduct").addEventListener("click", async (event) => {
-        const button = event.currentTarget;
-        if (button.disabled) return;
-        button.disabled = true;
-        try {
-            const { message } = await Api.delete(`/api/produtos/${product.id}`);
-            deleteModal.hide();
-            sessionStorage.setItem("productToast", message || "Produto excluído.");
-            window.location.href = "/produtos";
-        } catch (error) {
-            setAlert(error.message, "danger");
-            deleteModal.hide();
-        } finally {
-            button.disabled = false;
-        }
-    });
-
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     byId("editProductForm").addEventListener("submit", async (event) => {
         event.preventDefault();
         try {

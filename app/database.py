@@ -27,40 +27,22 @@ def rows_to_list(rows):
 
 def init_db(path: str = "estoque_v2.db"):
     set_db_path(path)
-    Path(path).parent.mkdir(parents=True, exist_ok=True) if Path(path).parent != Path('.') else None
+    Path(path).parent.mkdir(parents=True, exist_ok=True) if Path(path).parent != Path(".") else None
     with get_db() as db:
         db.executescript(SCHEMA)
-<<<<<<< HEAD
-        ensure_schema_migrations(db)
-=======
         apply_migrations(db)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
         seed_default_user(db)
         seed_default_locations(db)
         db.commit()
 
 
-<<<<<<< HEAD
-def column_exists(db, table, column):
-    return any(row["name"] == column for row in db.execute(f"PRAGMA table_info({table})").fetchall())
-
-
-def ensure_schema_migrations(db):
-    if column_exists(db, "produtos", "marca"):
-        db.execute("ALTER TABLE produtos DROP COLUMN marca")
-    if not column_exists(db, "produtos", "tipo_controle"):
-        db.execute("ALTER TABLE produtos ADD COLUMN tipo_controle TEXT NOT NULL DEFAULT 'quantidade'")
-    if not column_exists(db, "produtos", "prefixo_rastreio"):
-        db.execute("ALTER TABLE produtos ADD COLUMN prefixo_rastreio TEXT")
-    db.execute("UPDATE produtos SET tipo_controle = 'quantidade' WHERE tipo_controle IS NULL OR tipo_controle = ''")
-=======
 def has_column(db, table, column):
     return any(row["name"] == column for row in db.execute(f"PRAGMA table_info({table})").fetchall())
 
 
 def apply_migrations(db):
-    if not has_column(db, "produtos", "marca"):
-        db.execute("ALTER TABLE produtos ADD COLUMN marca TEXT")
+    if has_column(db, "produtos", "marca"):
+        db.execute("ALTER TABLE produtos DROP COLUMN marca")
     if not has_column(db, "produtos", "tipo_controle"):
         db.execute("ALTER TABLE produtos ADD COLUMN tipo_controle TEXT NOT NULL DEFAULT 'quantidade'")
     if not has_column(db, "produtos", "prefixo_rastreio"):
@@ -69,36 +51,13 @@ def apply_migrations(db):
         db.execute("ALTER TABLE movimentacoes ADD COLUMN unidades_codigos TEXT")
     if not has_column(db, "emprestimos", "unidades_codigos"):
         db.execute("ALTER TABLE emprestimos ADD COLUMN unidades_codigos TEXT")
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS produto_unidades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            produto_id INTEGER NOT NULL,
-            codigo_unidade TEXT NOT NULL UNIQUE,
-            status TEXT NOT NULL DEFAULT 'disponivel' CHECK(status IN ('disponivel','retirado','emprestado','descartado')),
-            localizacao_id INTEGER NOT NULL,
-            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            observacao TEXT,
-            FOREIGN KEY (produto_id) REFERENCES produtos(id),
-            FOREIGN KEY (localizacao_id) REFERENCES localizacoes(id)
-        )
-    """)
-    db.execute("CREATE INDEX IF NOT EXISTS idx_unidades_produto_status ON produto_unidades(produto_id, status)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_unidades_codigo ON produto_unidades(codigo_unidade)")
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS movimentacao_unidades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            movimentacao_id INTEGER NOT NULL,
-            unidade_id INTEGER NOT NULL,
-            codigo_unidade TEXT NOT NULL,
-            status_resultante TEXT NOT NULL,
-            criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (movimentacao_id) REFERENCES movimentacoes(id),
-            FOREIGN KEY (unidade_id) REFERENCES produto_unidades(id),
-            UNIQUE(movimentacao_id, unidade_id)
-        )
-    """)
-    db.execute("CREATE INDEX IF NOT EXISTS idx_mov_unidades_mov ON movimentacao_unidades(movimentacao_id)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_mov_unidades_codigo ON movimentacao_unidades(codigo_unidade)")
+    if has_column(db, "movimentacao_unidades", "unidade_id") and not has_column(db, "movimentacao_unidades", "produto_unidade_id"):
+        db.execute("ALTER TABLE movimentacao_unidades ADD COLUMN produto_unidade_id INTEGER")
+    if not has_column(db, "movimentacao_unidades", "status_antes"):
+        db.execute("ALTER TABLE movimentacao_unidades ADD COLUMN status_antes TEXT")
+    if not has_column(db, "movimentacao_unidades", "status_depois"):
+        db.execute("ALTER TABLE movimentacao_unidades ADD COLUMN status_depois TEXT")
+    db.execute("UPDATE produtos SET tipo_controle = 'quantidade' WHERE tipo_controle IS NULL OR tipo_controle = ''")
     db.execute("""
         CREATE TABLE IF NOT EXISTS codigo_barras_sequence (
             id INTEGER PRIMARY KEY CHECK(id = 1),
@@ -113,7 +72,6 @@ def apply_migrations(db):
             if len(value) == 8 and value[0] == "P" and value[1:].isdigit():
                 maior = max(maior, int(value[1:]))
         db.execute("INSERT INTO codigo_barras_sequence (id, last_value) VALUES (1, ?)", (maior,))
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
 
 
 def seed_default_user(db):
@@ -219,8 +177,6 @@ CREATE TABLE IF NOT EXISTS produtos (
     prefixo_rastreio TEXT,
     localizacao_id INTEGER NOT NULL,
     observacao TEXT,
-    tipo_controle TEXT NOT NULL DEFAULT 'quantidade' CHECK(tipo_controle IN ('quantidade','unidade')),
-    prefixo_rastreio TEXT,
     ativo INTEGER NOT NULL DEFAULT 1,
     criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TEXT,
@@ -275,7 +231,7 @@ CREATE INDEX IF NOT EXISTS idx_mov_data ON movimentacoes(data_hora);
 CREATE TABLE IF NOT EXISTS movimentacao_unidades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     movimentacao_id INTEGER NOT NULL,
-    produto_unidade_id INTEGER NOT NULL,
+    produto_unidade_id INTEGER,
     codigo_unidade TEXT NOT NULL,
     status_antes TEXT,
     status_depois TEXT,
@@ -306,21 +262,6 @@ CREATE TABLE IF NOT EXISTS emprestimos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_emp_status ON emprestimos(status);
-
-CREATE TABLE IF NOT EXISTS movimentacao_unidades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    movimentacao_id INTEGER NOT NULL,
-    unidade_id INTEGER NOT NULL,
-    codigo_unidade TEXT NOT NULL,
-    status_resultante TEXT NOT NULL,
-    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (movimentacao_id) REFERENCES movimentacoes(id),
-    FOREIGN KEY (unidade_id) REFERENCES produto_unidades(id),
-    UNIQUE(movimentacao_id, unidade_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_mov_unidades_mov ON movimentacao_unidades(movimentacao_id);
-CREATE INDEX IF NOT EXISTS idx_mov_unidades_codigo ON movimentacao_unidades(codigo_unidade);
 
 CREATE TABLE IF NOT EXISTS codigo_barras_sequence (
     id INTEGER PRIMARY KEY CHECK(id = 1),

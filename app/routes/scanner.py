@@ -13,34 +13,6 @@ def buscar(codigo):
     with get_db() as db:
         unidade = db.execute(
             """
-            SELECT u.*, p.codigo AS produto_codigo, p.nome AS produto_nome, p.localizacao_id AS produto_localizacao_id
-            FROM produto_unidades u
-            JOIN produtos p ON p.id = u.produto_id
-            WHERE u.codigo_unidade = ? AND p.ativo = 1
-            """,
-            (codigo,),
-        ).fetchone()
-        if unidade:
-            produto = db.execute("SELECT * FROM produtos WHERE id = ?", (unidade["produto_id"],)).fetchone()
-            loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (unidade["localizacao_id"],)).fetchone()
-            p = row_to_dict(produto)
-            p["localizacao"] = row_to_dict(loc)
-            p["localizacao_label"] = location_label(loc)
-            return api_ok({"tipo": "unidade", "produto": p, "unidade": row_to_dict(unidade), "localizacao": row_to_dict(loc)})
-
-        produto = db.execute(
-            "SELECT * FROM produtos WHERE ativo = 1 AND (codigo = ? OR codigo_barras = ?)",
-            (codigo, codigo),
-        ).fetchone()
-        if produto:
-            loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (produto["localizacao_id"],)).fetchone()
-            p = row_to_dict(produto)
-            p["localizacao"] = row_to_dict(loc)
-            p["localizacao_label"] = location_label(loc)
-            return api_ok({"tipo": "produto", "produto": p})
-
-        unidade = db.execute(
-            """
             SELECT u.*, p.nome AS produto_nome, p.codigo AS produto_codigo, p.codigo_barras, p.tipo_controle,
                    l.codigo AS localizacao_codigo, l.nome AS localizacao_nome, l.armario, l.prateleira
             FROM produto_unidades u
@@ -58,6 +30,17 @@ def buscar(codigo):
                 "nome": data["localizacao_nome"],
             })
             return api_ok({"tipo": "unidade", "unidade": data})
+
+        produto = db.execute(
+            "SELECT * FROM produtos WHERE ativo = 1 AND (codigo = ? OR codigo_barras = ?)",
+            (codigo, codigo),
+        ).fetchone()
+        if produto:
+            loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (produto["localizacao_id"],)).fetchone()
+            p = row_to_dict(produto)
+            p["localizacao"] = row_to_dict(loc)
+            p["localizacao_label"] = location_label(loc)
+            return api_ok({"tipo": "produto", "produto": p})
 
         loc = db.execute("SELECT * FROM localizacoes WHERE ativo = 1 AND codigo = ?", (codigo,)).fetchone()
         if loc:

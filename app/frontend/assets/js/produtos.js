@@ -4,7 +4,7 @@ async function loadProducts(query = "") {
     const { data } = await Api.get(`/api/produtos${query ? `?q=${encodeURIComponent(query)}` : ""}`);
     byId("productRows").innerHTML = data.produtos.map((produto) => `
         <tr>
-            <td><a href="/produtos/${encodeURIComponent(produto.codigo)}" class="fw-semibold text-decoration-none">${escapeHtml(produto.nome)}</a><div class="small text-secondary">${escapeHtml([produto.codigo, produto.marca, produto.modelo].filter(Boolean).join(" · "))}</div></td>
+            <td><a href="/produtos/${encodeURIComponent(produto.codigo)}" class="fw-semibold text-decoration-none">${escapeHtml(produto.nome)}</a><div class="small text-secondary">${escapeHtml([produto.codigo, produto.modelo].filter(Boolean).join(" · "))}</div></td>
             <td>${escapeHtml(friendlyLocation(produto))}</td>
             <td>${statusBadge(produto.status)}</td>
             <td class="text-end">${produto.quantidade_atual}</td>

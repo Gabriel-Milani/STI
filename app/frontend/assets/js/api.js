@@ -53,46 +53,36 @@ function escapeHtml(value) {
 }
 
 function setAlert(message, type = "success", targetId = "alert") {
-<<<<<<< HEAD
-    const cls = type === "danger" ? "danger" : type;
-=======
     showToast(message, type);
     const target = byId(targetId);
     if (target) target.innerHTML = "";
 }
 
 function showToast(message, type = "success") {
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     let container = byId("toastContainer");
     if (!container) {
         container = document.createElement("div");
         container.id = "toastContainer";
         container.className = "toast-container position-fixed top-0 end-0 p-3";
-<<<<<<< HEAD
-        document.body.appendChild(container);
-    }
-    const toast = document.createElement("div");
-    toast.className = `toast align-items-center text-bg-${cls} border-0`;
-    toast.setAttribute("role", "alert");
-=======
         container.style.zIndex = "1080";
         document.body.appendChild(container);
     }
-    const cls = { success: "text-bg-success", danger: "text-bg-danger", error: "text-bg-danger", warning: "text-bg-warning", aviso: "text-bg-warning" }[type] || "text-bg-secondary";
+    const cls = {
+        success: "text-bg-success",
+        danger: "text-bg-danger",
+        error: "text-bg-danger",
+        warning: "text-bg-warning",
+        aviso: "text-bg-warning",
+    }[type] || "text-bg-secondary";
     const toast = document.createElement("div");
     toast.className = `toast align-items-center border-0 ${cls}`;
     toast.setAttribute("role", "status");
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     toast.innerHTML = `<div class="d-flex">
         <div class="toast-body">${escapeHtml(message)}</div>
         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
     </div>`;
     container.appendChild(toast);
-<<<<<<< HEAD
-    const instance = new bootstrap.Toast(toast, { delay: 3500 });
-=======
     const instance = bootstrap.Toast.getOrCreateInstance(toast, { delay: 3500 });
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     toast.addEventListener("hidden.bs.toast", () => toast.remove());
     instance.show();
 }

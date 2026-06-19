@@ -2,7 +2,6 @@ from flask import Blueprint, request
 from ..database import get_db, rows_to_list
 from ..services.auth_utils import login_required, current_user_id, current_user_name
 from ..services.helpers import api_ok, api_error, parse_int, audit
-<<<<<<< HEAD
 from ..services.unidades import (
     attach_units_to_mov,
     change_units_status,
@@ -11,9 +10,6 @@ from ..services.unidades import (
     sync_product_quantity,
     take_available_units,
 )
-=======
-from ..services.unit_control import create_units, is_unit_product, record_movement_units, sync_unit_stock, take_available_units
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
 
 movimentacoes_bp = Blueprint("movimentacoes", __name__)
 
@@ -27,18 +23,15 @@ def get_product(db, produto_id):
     return db.execute("SELECT * FROM produtos WHERE id = ? AND ativo = 1", (produto_id,)).fetchone()
 
 
-<<<<<<< HEAD
 def actor_name():
     return current_user_name() or "Usuário logado"
 
 
-def create_mov(db, produto, tipo, qtd, antes, depois, data):
+def create_mov(db, produto, tipo, qtd, antes, depois, data, unidades=None):
     origem = data.get("responsavel_origem") or data.get("entregue_por") or data.get("recebido_por") or data.get("descartado_por")
     if not origem and tipo in ("entrada", "retirada", "emprestimo", "descarte"):
         origem = actor_name()
-=======
-def create_mov(db, produto, tipo, qtd, antes, depois, data, unidades_codigos=None):
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+    unidades_codigos = ",".join([u["codigo_unidade"] for u in unidades]) if unidades else None
     cur = db.execute(
         """
         INSERT INTO movimentacoes
@@ -48,23 +41,24 @@ def create_mov(db, produto, tipo, qtd, antes, depois, data, unidades_codigos=Non
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            produto["id"], tipo, qtd, antes, depois,
+            produto["id"],
+            tipo,
+            qtd,
+            antes,
+            depois,
             origem,
             data.get("responsavel_destino") or data.get("entregue_para") or data.get("emprestado_para"),
-            data.get("destino"), data.get("motivo"), data.get("observacao"),
-            ",".join(unidades_codigos) if unidades_codigos else None,
-            produto["localizacao_id"], produto["localizacao_id"], current_user_id()
+            data.get("destino"),
+            data.get("motivo"),
+            data.get("observacao"),
+            unidades_codigos,
+            produto["localizacao_id"],
+            produto["localizacao_id"],
+            current_user_id(),
         ),
     )
-    status_resultante = {
-        "entrada": "disponivel",
-        "retirada": "retirado",
-        "emprestimo": "emprestado",
-        "descarte": "descartado",
-        "devolucao": "disponivel",
-    }.get(tipo)
-    if status_resultante:
-        record_movement_units(db, cur.lastrowid, unidades_codigos, status_resultante)
+    if unidades:
+        attach_units_to_mov(db, cur.lastrowid, unidades)
     return cur.lastrowid
 
 
@@ -107,7 +101,6 @@ def entrada():
             if not produto:
                 return rollback_error(db, "Produto não encontrado.", 404)
             antes = produto["quantidade_atual"]
-<<<<<<< HEAD
             unidades = []
             if is_unit_product(produto):
                 unidades = create_units(db, produto, qtd, data.get("observacao"))
@@ -115,19 +108,7 @@ def entrada():
             else:
                 depois = antes + qtd
                 db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "entrada", qtd, antes, depois, data)
-            if unidades:
-                attach_units_to_mov(db, mov_id, unidades)
-=======
-            unidades_codigos = None
-            if is_unit_product(produto):
-                unidades_codigos = create_units(db, produto, qtd, data.get("observacao"))
-                depois = sync_unit_stock(db, produto_id)
-            else:
-                depois = antes + qtd
-                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "entrada", qtd, antes, depois, data, unidades_codigos)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+            mov_id = create_mov(db, produto, "entrada", qtd, antes, depois, data, unidades)
             audit(db, current_user_id(), "entrada", "produto", produto_id, f"+{qtd}")
             db.commit()
             return api_ok({"movimentacao_id": mov_id, "quantidade_atual": depois}, "Entrada registrada.")
@@ -156,7 +137,6 @@ def retirada():
             antes = produto["quantidade_atual"]
             if qtd > antes:
                 return rollback_error(db, "Não há estoque suficiente para essa retirada.", 409)
-<<<<<<< HEAD
             unidades = []
             if is_unit_product(produto):
                 selecionadas = take_available_units(db, produto_id, qtd)
@@ -167,21 +147,7 @@ def retirada():
             else:
                 depois = antes - qtd
                 db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "retirada", qtd, antes, depois, data)
-            if unidades:
-                attach_units_to_mov(db, mov_id, unidades)
-=======
-            unidades_codigos = None
-            if is_unit_product(produto):
-                unidades_codigos = take_available_units(db, produto_id, qtd, "retirado")
-                if unidades_codigos is None:
-                    return rollback_error(db, "Não há unidades disponíveis suficientes para essa retirada.", 409)
-                depois = sync_unit_stock(db, produto_id)
-            else:
-                depois = antes - qtd
-                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "retirada", qtd, antes, depois, data, unidades_codigos)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+            mov_id = create_mov(db, produto, "retirada", qtd, antes, depois, data, unidades)
             audit(db, current_user_id(), "retirada", "produto", produto_id, f"-{qtd}")
             db.commit()
             return api_ok({"movimentacao_id": mov_id, "quantidade_atual": depois}, "Retirada registrada.")
@@ -210,7 +176,6 @@ def descarte():
             antes = produto["quantidade_atual"]
             if qtd > antes:
                 return rollback_error(db, "Não há estoque suficiente para esse descarte.", 409)
-<<<<<<< HEAD
             unidades = []
             if is_unit_product(produto):
                 selecionadas = take_available_units(db, produto_id, qtd)
@@ -221,21 +186,7 @@ def descarte():
             else:
                 depois = antes - qtd
                 db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "descarte", qtd, antes, depois, data)
-            if unidades:
-                attach_units_to_mov(db, mov_id, unidades)
-=======
-            unidades_codigos = None
-            if is_unit_product(produto):
-                unidades_codigos = take_available_units(db, produto_id, qtd, "descartado")
-                if unidades_codigos is None:
-                    return rollback_error(db, "Não há unidades disponíveis suficientes para esse descarte.", 409)
-                depois = sync_unit_stock(db, produto_id)
-            else:
-                depois = antes - qtd
-                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "descarte", qtd, antes, depois, data, unidades_codigos)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+            mov_id = create_mov(db, produto, "descarte", qtd, antes, depois, data, unidades)
             audit(db, current_user_id(), "descarte", "produto", produto_id, f"-{qtd}")
             db.commit()
             return api_ok({"movimentacao_id": mov_id, "quantidade_atual": depois}, "Descarte registrado.")
@@ -264,7 +215,6 @@ def emprestimo():
             antes = produto["quantidade_atual"]
             if qtd > antes:
                 return rollback_error(db, "Não há estoque suficiente para esse empréstimo.", 409)
-<<<<<<< HEAD
             unidades = []
             if is_unit_product(produto):
                 selecionadas = take_available_units(db, produto_id, qtd)
@@ -275,32 +225,25 @@ def emprestimo():
             else:
                 depois = antes - qtd
                 db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "emprestimo", qtd, antes, depois, data)
-            if unidades:
-                attach_units_to_mov(db, mov_id, unidades)
-=======
-            unidades_codigos = None
-            if is_unit_product(produto):
-                unidades_codigos = take_available_units(db, produto_id, qtd, "emprestado")
-                if unidades_codigos is None:
-                    return rollback_error(db, "Não há unidades disponíveis suficientes para esse empréstimo.", 409)
-                depois = sync_unit_stock(db, produto_id)
-            else:
-                depois = antes - qtd
-                db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto_id))
-            mov_id = create_mov(db, produto, "emprestimo", qtd, antes, depois, data, unidades_codigos)
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+            mov_id = create_mov(db, produto, "emprestimo", qtd, antes, depois, data, unidades)
+            codigos = ",".join([u["codigo_unidade"] for u in unidades]) if unidades else None
             emp_cur = db.execute(
                 """
                 INSERT INTO emprestimos
-                (produto_id, quantidade, entregue_por, emprestado_para, destino, observacao, unidades_codigos, status, movimentacao_emprestimo_id)
+                (produto_id, quantidade, entregue_por, emprestado_para, destino, observacao,
+                 unidades_codigos, status, movimentacao_emprestimo_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'aberto', ?)
                 """,
-<<<<<<< HEAD
-                (produto_id, qtd, data.get("entregue_por") or actor_name(), data.get("emprestado_para"), data.get("destino"), data.get("observacao"), mov_id),
-=======
-                (produto_id, qtd, data.get("entregue_por"), data.get("emprestado_para"), data.get("destino"), data.get("observacao"), ",".join(unidades_codigos) if unidades_codigos else None, mov_id),
->>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
+                (
+                    produto_id,
+                    qtd,
+                    data.get("entregue_por") or actor_name(),
+                    data.get("emprestado_para"),
+                    data.get("destino"),
+                    data.get("observacao"),
+                    codigos,
+                    mov_id,
+                ),
             )
             audit(db, current_user_id(), "emprestimo", "produto", produto_id, f"-{qtd}")
             db.commit()
