@@ -24,15 +24,26 @@ function renderLocation(localizacao, produtos) {
         </div></div>`;
 }
 
+<<<<<<< HEAD
 function renderUnit(unidade) {
+=======
+function renderUnit(produto, unidade) {
+>>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
     return `
         <div class="card shadow-sm"><div class="card-body">
             <div class="d-flex flex-wrap justify-content-between gap-3">
                 <div>
+<<<<<<< HEAD
                     <h2 class="h4 mb-1"><a href="/produtos/${encodeURIComponent(unidade.produto_codigo)}">${escapeHtml(unidade.produto_nome)}</a></h2>
                     <div class="text-secondary">${escapeHtml(unidade.codigo_unidade)} · ${escapeHtml(unidade.localizacao_label)}</div>
                 </div>
                 <div class="text-end"><div class="badge bg-secondary fs-6">${escapeHtml(unidade.status)}</div><div class="text-secondary small mt-2">unidade rastreável</div></div>
+=======
+                    <h2 class="h4 mb-1"><a href="/produtos/${encodeURIComponent(produto.codigo)}">${escapeHtml(produto.nome)}</a></h2>
+                    <div class="text-secondary">${escapeHtml(produto.codigo)} · ${escapeHtml(produto.localizacao_label)}</div>
+                </div>
+                <div class="text-end"><div class="fs-4 fw-semibold">${escapeHtml(unidade.codigo_unidade)}</div><div class="text-secondary small">${escapeHtml(unidade.status)}</div></div>
+>>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
             </div>
         </div></div>`;
 }
@@ -47,7 +58,11 @@ function renderUnit(unidade) {
             byId("scanResult").innerHTML = data.tipo === "produto"
                 ? renderProduct(data.produto)
                 : data.tipo === "unidade"
+<<<<<<< HEAD
                     ? renderUnit(data.unidade)
+=======
+                    ? renderUnit(data.produto, data.unidade)
+>>>>>>> c8da6591bc55c3ea4cf2766c27e532b7609c9962
                     : renderLocation(data.localizacao, data.produtos);
         } catch (error) {
             byId("scanResult").innerHTML = "";
