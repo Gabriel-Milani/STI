@@ -51,6 +51,10 @@ def apply_migrations(db):
         db.execute("ALTER TABLE movimentacoes ADD COLUMN unidades_codigos TEXT")
     if not has_column(db, "emprestimos", "unidades_codigos"):
         db.execute("ALTER TABLE emprestimos ADD COLUMN unidades_codigos TEXT")
+    if not has_column(db, "usuarios", "atualizado_em"):
+        db.execute("ALTER TABLE usuarios ADD COLUMN atualizado_em TEXT")
+    if not has_column(db, "usuarios", "ultimo_login"):
+        db.execute("ALTER TABLE usuarios ADD COLUMN ultimo_login TEXT")
     if has_column(db, "movimentacao_unidades", "unidade_id") and not has_column(db, "movimentacao_unidades", "produto_unidade_id"):
         db.execute("ALTER TABLE movimentacao_unidades ADD COLUMN produto_unidade_id INTEGER")
     if not has_column(db, "movimentacao_unidades", "status_antes"):
@@ -138,7 +142,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     password_hash TEXT NOT NULL,
     perfil TEXT NOT NULL DEFAULT 'operador',
     ativo INTEGER NOT NULL DEFAULT 1,
-    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TEXT,
+    ultimo_login TEXT
 );
 
 CREATE TABLE IF NOT EXISTS prateleiras (

@@ -10,9 +10,10 @@ mountNav("movimentacoes");
                 <td><a href="/produtos/${encodeURIComponent(mov.produto_codigo)}">${escapeHtml(mov.produto_nome)}</a><div class="small text-secondary">${escapeHtml(mov.produto_codigo)}</div></td>
                 <td>${escapeHtml(mov.tipo)}</td>
                 <td>${escapeHtml([mov.responsavel_origem, mov.responsavel_destino].filter(Boolean).join(" > ") || "-")}</td>
+                <td>${escapeHtml(mov.usuario_nome || mov.usuario_username || "-")}</td>
                 <td class="text-end">${mov.quantidade}</td>
             </tr>
-        `).join("") || `<tr><td colspan="5" class="text-secondary">Sem movimentações.</td></tr>`;
+        `).join("") || `<tr><td colspan="6" class="text-secondary">Sem movimentações.</td></tr>`;
     } catch (error) {
         setAlert(error.message, "danger");
     }

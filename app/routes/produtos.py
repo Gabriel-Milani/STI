@@ -167,7 +167,14 @@ def detalhe(codigo_ou_id):
             return api_error("Produto não encontrado.", 404)
         loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (produto["localizacao_id"],)).fetchone()
         movs = db.execute(
-            "SELECT * FROM movimentacoes WHERE produto_id = ? ORDER BY data_hora DESC LIMIT 20",
+            """
+            SELECT m.*, u.nome AS usuario_nome, u.username AS usuario_username
+            FROM movimentacoes m
+            LEFT JOIN usuarios u ON u.id = m.usuario_id
+            WHERE m.produto_id = ?
+            ORDER BY m.data_hora DESC
+            LIMIT 20
+            """,
             (produto["id"],),
         ).fetchall()
         emp = db.execute(

@@ -5,35 +5,42 @@ let locations = [];
 let selectedMoveShelf = "";
 let editModal = null;
 
-const movementFields = {
-    entrada: `
+function loggedUserLabel() {
+    return (currentUser && (currentUser.nome || currentUser.username)) || "usuário logado";
+}
+
+function movementFields() {
+    const user = escapeHtml(loggedUserLabel());
+    return {
+        entrada: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-5"><input class="form-control" value="Recebido por: usuário logado" disabled></div>
+        <div class="col-md-5"><input class="form-control" value="Recebido por: ${user}" disabled></div>
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
-    retirada: `
+        retirada: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" value="Entregue por: usuário logado" disabled></div>
+        <div class="col-md-4"><input class="form-control" value="Entregue por: ${user}" disabled></div>
         <div class="col-md-5"><input class="form-control" name="entregue_para" placeholder="Entregue para" required></div>
         <div class="col-md-6"><input class="form-control" name="destino" placeholder="Destino"></div>
         <div class="col-md-6"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
-    emprestimo: `
+        emprestimo: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" value="Entregue por: usuário logado" disabled></div>
+        <div class="col-md-4"><input class="form-control" value="Entregue por: ${user}" disabled></div>
         <div class="col-md-5"><input class="form-control" name="emprestado_para" placeholder="Emprestado para" required></div>
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
-    descarte: `
+        descarte: `
         <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" value="Descartado por: usuário logado" disabled></div>
+        <div class="col-md-4"><input class="form-control" value="Descartado por: ${user}" disabled></div>
         <div class="col-md-5"><input class="form-control" name="motivo" placeholder="Motivo" required></div>
         <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
-};
+    };
+}
 
 function renderMovementFields() {
-    byId("movementFields").innerHTML = movementFields[byId("movementType").value] || "";
+    byId("movementFields").innerHTML = movementFields()[byId("movementType").value] || "";
     byId("movementTypeButtons").querySelectorAll("[data-movement-type]").forEach((button) => {
         button.classList.toggle("active", button.dataset.movementType === byId("movementType").value);
     });
@@ -76,9 +83,23 @@ async function loadProduct() {
     `;
     byId("editProductButton").addEventListener("click", openEditModal);
     renderUnits(data.unidades || []);
-    byId("historyRows").innerHTML = data.movimentacoes.map((mov) => `
-        <tr><td>${formatDate(mov.data_hora)}</td><td>${escapeHtml(mov.tipo)}</td><td>${mov.quantidade}</td><td>${escapeHtml(mov.observacao || "")}</td></tr>
-    `).join("") || `<tr><td colspan="4" class="text-secondary">Sem histórico.</td></tr>`;
+    byId("historyRows").innerHTML = data.movimentacoes.map((mov) => {
+        const detalhes = [
+            mov.responsavel_destino ? `Para: ${mov.responsavel_destino}` : "",
+            mov.destino ? `Destino: ${mov.destino}` : "",
+            mov.motivo ? `Motivo: ${mov.motivo}` : "",
+            mov.observacao || "",
+        ].filter(Boolean).join(" · ");
+        return `
+            <tr>
+                <td>${formatDate(mov.data_hora)}</td>
+                <td>${escapeHtml(mov.tipo)}</td>
+                <td>${mov.quantidade}</td>
+                <td>${escapeHtml(detalhes || "-")}</td>
+                <td>${escapeHtml(mov.usuario_nome || mov.usuario_username || "-")}</td>
+            </tr>
+        `;
+    }).join("") || `<tr><td colspan="5" class="text-secondary">Sem histórico.</td></tr>`;
     renderMoveLocationPicker();
 }
 

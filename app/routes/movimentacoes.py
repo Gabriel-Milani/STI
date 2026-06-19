@@ -73,9 +73,10 @@ def listar():
         where.append("m.produto_id = ?")
         params.append(produto_id)
     sql = """
-        SELECT m.*, p.nome AS produto_nome, p.codigo AS produto_codigo
+        SELECT m.*, p.nome AS produto_nome, p.codigo AS produto_codigo, u.nome AS usuario_nome, u.username AS usuario_username
         FROM movimentacoes m
         JOIN produtos p ON p.id = m.produto_id
+        LEFT JOIN usuarios u ON u.id = m.usuario_id
     """
     if where:
         sql += " WHERE " + " AND ".join(where)

@@ -12,6 +12,7 @@ from .routes.scanner import scanner_bp
 from .routes.dashboard import dashboard_bp
 from .routes.etiquetas import etiquetas_bp
 from .routes.importacao import importacao_bp
+from .routes.usuarios import usuarios_bp
 
 
 def create_app():
@@ -32,6 +33,7 @@ def create_app():
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(etiquetas_bp, url_prefix="/api/etiquetas")
     app.register_blueprint(importacao_bp, url_prefix="/api/importacao")
+    app.register_blueprint(usuarios_bp, url_prefix="/api/usuarios")
 
     @app.get("/api/health")
     def health():
@@ -84,6 +86,10 @@ def create_app():
     @app.get("/importacao")
     def importacao_page():
         return send_from_directory("frontend", "importacao.html")
+
+    @app.get("/usuarios")
+    def usuarios_page():
+        return send_from_directory("frontend", "usuarios.html")
 
     @app.get("/assets/<path:filename>")
     def frontend_assets(filename):

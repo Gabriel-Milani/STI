@@ -147,6 +147,7 @@ function mountNav(active) {
         ["emprestimos", "/emprestimos", "Empréstimos"],
         ["scanner", "/scanner", "Scanner"],
         ["importacao", "/importacao", "Importação"],
+        ["usuarios", "/usuarios", "Usuários"],
     ];
     nav.innerHTML = items.map(([key, href, label]) =>
         `<a class="nav-link ${key === active ? "active" : ""}" href="${href}">${label}</a>`

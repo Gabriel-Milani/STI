@@ -15,10 +15,15 @@ def login():
         return api_error("Informe usuário e senha.", 400)
 
     with get_db() as db:
-        user = db.execute("SELECT * FROM usuarios WHERE username = ? AND ativo = 1", (username,)).fetchone()
+        user = db.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
         if not user or not check_password_hash(user["password_hash"], password):
             return api_error("Usuário ou senha inválidos.", 401)
+        if not user["ativo"]:
+            return api_error("Usuário inativo. Procure o responsável pelo sistema.", 403)
+        db.execute("UPDATE usuarios SET ultimo_login = CURRENT_TIMESTAMP WHERE id = ?", (user["id"],))
+        db.commit()
         session["user_id"] = user["id"]
+        session["usuario_id"] = user["id"]
         session["username"] = user["username"]
         session["nome"] = user["nome"]
         session["perfil"] = user["perfil"]

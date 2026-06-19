@@ -82,8 +82,51 @@ def test_unidade():
         assert vinculadas >= 4
 
 
+def test_usuarios():
+    response = client.post(
+        "/api/usuarios",
+        json={"nome": "João Silva", "usuario": "joao", "senha": "1234", "confirmar_senha": "1234", "ativo": True},
+    )
+    joao_id = assert_ok(response, 201)["data"]["id"]
+    usuarios = assert_ok(client.get("/api/usuarios"))["data"]["usuarios"]
+    assert any(user["usuario"] == "joao" for user in usuarios)
+
+    assert_ok(client.post("/api/auth/login", json={"username": "joao", "password": "1234"}))
+    produto = assert_ok(client.post(
+        "/api/produtos",
+        json={
+            "nome": "Cabo USB",
+            "categoria": "Cabos",
+            "modelo": "USB-A",
+            "quantidade_inicial": 2,
+            "estoque_minimo": 0,
+            "localizacao_codigo": "ARM01-P6-CABOS",
+        },
+    ), 201)["data"]
+    assert_ok(client.post("/api/movimentacoes/retirada", json={"produto_id": produto["id"], "quantidade": 1, "entregue_para": "Joao"}))
+    historico = assert_ok(client.get(f"/api/produtos/{produto['id']}"))["data"]["movimentacoes"]
+    assert historico[0]["usuario_nome"] == "João Silva"
+
+    assert_ok(client.post("/api/auth/login", json={"username": "admin", "password": "admin123"}))
+    assert_ok(client.post(f"/api/usuarios/{joao_id}/desativar", json={}))
+    assert_error(client.post("/api/auth/login", json={"username": "joao", "password": "1234"}), 403)
+    assert_ok(client.post("/api/auth/login", json={"username": "admin", "password": "admin123"}))
+    assert_ok(client.post(f"/api/usuarios/{joao_id}/resetar-senha", json={"senha": "5678", "confirmar_senha": "5678"}))
+    assert_ok(client.post(f"/api/usuarios/{joao_id}/ativar", json={}))
+    assert_ok(client.post("/api/auth/login", json={"username": "joao", "password": "5678"}))
+
+    assert_ok(client.post("/api/auth/login", json={"username": "admin", "password": "admin123"}))
+    assert_error(
+        client.post("/api/usuarios", json={"nome": "João Silva 2", "usuario": "joao", "senha": "1234", "confirmar_senha": "1234"}),
+        409,
+    )
+    assert_ok(client.post(f"/api/usuarios/{joao_id}/desativar", json={}))
+    assert_error(client.post("/api/usuarios/1/desativar", json={}), 409)
+
+
 if __name__ == "__main__":
     login()
     test_quantidade()
     test_unidade()
+    test_usuarios()
     print("Todos os fluxos principais passaram.")
