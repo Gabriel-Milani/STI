@@ -9,4 +9,6 @@ __pycache__/
 *.pyc
 backups/*.db
 tmp/
+data/
+logs/
 .vscode/

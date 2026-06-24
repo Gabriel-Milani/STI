@@ -2,8 +2,8 @@ from flask import Blueprint, request
 from openpyxl import load_workbook
 from ..database import get_db
 from ..services.auth_utils import login_required, current_user_id, current_user_name
-from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit
-from ..services.stock_movements import create_mov
+from ..services.helpers import api_ok, api_error
+from ..services.products import ProductCreateError, ProductValidationError, create_product
 
 importacao_bp = Blueprint("importacao", __name__)
 
@@ -11,6 +11,12 @@ EXPECTED_HEADERS = [
     "nome", "categoria", "modelo", "codigo_barras",
     "quantidade_inicial", "estoque_minimo", "localizacao_codigo", "observacao"
 ]
+ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
+
+
+def allowed_excel_file(filename):
+    name = (filename or "").lower()
+    return any(name.endswith(ext) for ext in ALLOWED_EXTENSIONS)
 
 
 @importacao_bp.get("/template")
@@ -25,6 +31,8 @@ def importar_produtos():
     if "arquivo" not in request.files:
         return api_error("Envie um arquivo Excel no campo 'arquivo'.", 400)
     file = request.files["arquivo"]
+    if not allowed_excel_file(file.filename):
+        return api_error("Envie um arquivo Excel .xlsx ou .xlsm.", 400)
     try:
         wb = load_workbook(file, data_only=True)
         ws = wb.active
@@ -45,41 +53,19 @@ def importar_produtos():
             nome = str(data.get("nome") or "").strip()
             if not nome:
                 continue
-            loc_codigo = str(data.get("localizacao_codigo") or "").strip().upper()
-            loc = db.execute("SELECT id FROM localizacoes WHERE codigo = ? AND ativo = 1", (loc_codigo,)).fetchone()
-            if not loc:
-                erros.append({"linha": row_num, "erro": "Localização inválida", "localizacao_codigo": loc_codigo})
-                continue
-            qtd = parse_int(data.get("quantidade_inicial"))
-            minimo = parse_int(data.get("estoque_minimo"))
-            if qtd < 0 or minimo < 0:
-                erros.append({"linha": row_num, "erro": "Quantidade ou mínimo negativo"})
-                continue
-            codigo_barras = str(data.get("codigo_barras") or "").strip() or generate_barcode(db)
+            data["recebido_por"] = current_user_name()
             try:
-                codigo = generate_product_code(db=db)
-                cur = db.execute(
-                    """
-                    INSERT INTO produtos
-                    (codigo, nome, categoria, modelo, codigo_barras, quantidade_atual, estoque_minimo, localizacao_id, observacao, ativo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                    """,
-                    (codigo, nome, data.get("categoria"), data.get("modelo"), codigo_barras, qtd, minimo, loc["id"], data.get("observacao")),
+                create_product(
+                    db,
+                    data,
+                    current_user_id(),
+                    audit_action="importar",
+                    initial_note="Importação inicial",
                 )
-                if qtd > 0:
-                    produto = db.execute("SELECT * FROM produtos WHERE id = ?", (cur.lastrowid,)).fetchone()
-                    create_mov(
-                        db,
-                        produto,
-                        "entrada",
-                        qtd,
-                        0,
-                        qtd,
-                        {"recebido_por": current_user_name(), "observacao": "Importação inicial"},
-                    )
-                audit(db, current_user_id(), "importar", "produto", cur.lastrowid, codigo)
                 criados += 1
-            except Exception:
-                erros.append({"linha": row_num, "erro": "Falha ao inserir. Código de barras duplicado?"})
+            except ProductValidationError as error:
+                erros.append({"linha": row_num, "erro": error.message})
+            except ProductCreateError as error:
+                erros.append({"linha": row_num, "erro": error.message})
         db.commit()
     return api_ok({"criados": criados, "erros": erros}, "Importação finalizada.")

@@ -307,7 +307,7 @@ function renderOperationalMap() {
         <article class="operational-cabinet-card">
             <div class="cabinet-header">
                 <div class="cabinet-identity">
-                    <div class="cabinet-icon">${pixelAsset("/assets/img/pixel-ops/dashboard/ARM01.png", "ARM01")}</div>
+                    <div class="cabinet-icon">${pixelAsset("/assets/img/pixel-ops/dashboard/ARM01.webp", "ARM01")}</div>
                     <div>
                         <span class="panel-kicker">Armário ativo</span>
                         <h2>${escapeHtml(armario.codigo)}</h2>
@@ -335,7 +335,7 @@ function renderFutureExpansion() {
     const items = locationMap.planejados.filter(futureVisible);
     byId("futureExpansion").innerHTML = items.map((item) => `
         <article class="future-card future-${escapeHtml(item.status)}">
-            <div class="future-icon">${pixelAsset(`/assets/img/pixel-ops/dashboard/${item.codigo}.png`, item.codigo)}</div>
+            <div class="future-icon">${pixelAsset(`/assets/img/pixel-ops/dashboard/${item.codigo}.webp`, item.codigo)}</div>
             <div>
                 <h3>${escapeHtml(item.codigo)}</h3>
                 <p>${escapeHtml(item.nome)}</p>

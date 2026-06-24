@@ -18,45 +18,8 @@ const typeClasses = {
     mover: "move-map",
 };
 
-const productIcons = [
-    ["limpa contato", "contact-cleaner"],
-    ["pasta térmica", "thermal-paste"],
-    ["pasta termica", "thermal-paste"],
-    ["carregador", "charger"],
-    ["toner", "toner"],
-    ["unidade de imagem", "imaging-unit"],
-    ["pm9500", "scanner-battery"],
-    ["bateria", "battery"],
-    ["placa", "pci-card"],
-    ["pci", "pci-card"],
-    ["conversor", "converter"],
-    ["extensor", "extender"],
-    ["lightining", "lightning-cable"],
-    ["lightning", "lightning-cable"],
-    ["base notebook", "notebook-base"],
-    ["teclado", "keyboard"],
-    ["mouse", "mouse"],
-    ["hdmi", "cable"],
-    ["cabo", "cable"],
-    ["monitor", "ssd"],
-    ["fonte", "adapter"],
-    ["hd notebook", "hdd"],
-    ["hdd", "hdd"],
-    ["ssd", "ssd"],
-    ["headset mono", "mono-headset"],
-    ["headset", "headset"],
-    ["rj45", "adapter"],
-    ["adaptador", "adapter"],
-];
-
 function formatNumber(value) {
     return Number(value || 0).toLocaleString("pt-BR");
-}
-
-function productIcon(item) {
-    const text = `${item.nome || ""} ${item.categoria || ""} ${item.modelo || ""}`.toLowerCase();
-    const found = productIcons.find(([needle]) => text.includes(needle));
-    return found ? found[1] : "box";
 }
 
 function movementWhen(value) {
@@ -119,7 +82,7 @@ function renderMetrics(resumo) {
     byId("metrics").innerHTML = metrics.map((item) => `
         <article class="dashboard-metric metric-tone-${item.tone}">
             <div class="metric-pixel" aria-hidden="true">
-                <img class="pixel-asset-img" src="/assets/img/pixel-ops/${item.iconBase || "metrics"}/${item.icon}.png" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                <img class="pixel-asset-img" src="/assets/img/pixel-ops/${item.iconBase || "metrics"}/${item.icon}.webp" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
                 <span></span>
             </div>
             <div class="dashboard-metric-body">
@@ -134,11 +97,11 @@ function renderMetrics(resumo) {
 
 function renderCritical(rows) {
     byId("criticalRows").innerHTML = rows.map((item) => {
-        const icon = productIcon(item);
+        const icon = productIconName(item);
         return `
             <a class="low-stock-item" href="/produtos/${encodeURIComponent(item.codigo)}">
                 <span class="item-thumb">
-                    <img class="pixel-asset-img" src="/assets/img/pixel-ops/products/${icon}.png" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                    <img class="pixel-asset-img" src="/assets/img/pixel-ops/products/${icon}.webp" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
                 </span>
                 <span class="item-main">
                     <strong>${escapeHtml(item.nome)}</strong>
@@ -245,7 +208,7 @@ function renderMap(rows) {
     });
     byId("mapRows").innerHTML = tiles.map((item, index) => `
         <a class="map-tile map-tone-${index}" href="/localizacoes">
-            <img class="map-icon-img" src="/assets/img/pixel-ops/dashboard/${item.key}.png" alt="" loading="lazy" decoding="async">
+            <img class="map-icon-img" src="/assets/img/pixel-ops/dashboard/${item.key}.webp" alt="" loading="lazy" decoding="async">
             <span><strong>${escapeHtml(item.key)}</strong><small>${escapeHtml(item.label)}</small><em>${formatNumber(item.count)} ativas</em></span>
         </a>
     `).join("");

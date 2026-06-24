@@ -4,47 +4,8 @@ let products = [];
 let activeFilter = "todos";
 let activeLocationsCount = 0;
 
-const categoryIconMap = [
-    ["limpa contato", "contact-cleaner"],
-    ["pasta térmica", "thermal-paste"],
-    ["pasta termica", "thermal-paste"],
-    ["carregador", "charger"],
-    ["toner", "toner"],
-    ["unidade de imagem", "imaging-unit"],
-    ["pm9500", "scanner-battery"],
-    ["bateria", "battery"],
-    ["placa", "pci-card"],
-    ["pci", "pci-card"],
-    ["conversor", "converter"],
-    ["extensor", "extender"],
-    ["lightining", "lightning-cable"],
-    ["lightning", "lightning-cable"],
-    ["base notebook", "notebook-base"],
-    ["mouse", "mouse"],
-    ["teclado", "keyboard"],
-    ["cabo", "cable"],
-    ["hdmi", "cable"],
-    ["display", "cable"],
-    ["hd notebook", "hdd"],
-    ["hdd", "hdd"],
-    ["rj45", "adapter"],
-    ["rede", "adapter"],
-    ["headset mono", "mono-headset"],
-    ["fone", "headset"],
-    ["headset", "headset"],
-    ["ssd", "ssd"],
-    ["adaptador", "adapter"],
-    ["limpeza", "box"],
-];
-
 function pixelImg(src, alt = "") {
     return `<img class="pixel-asset-img" src="${src}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">`;
-}
-
-function productIconClass(produto) {
-    const source = `${produto.categoria || ""} ${produto.nome || ""} ${produto.modelo || ""}`.toLowerCase();
-    const found = categoryIconMap.find(([key]) => source.includes(key));
-    return found ? found[1] : "box";
 }
 
 function controlBadge(produto) {
@@ -100,7 +61,7 @@ function renderMetrics() {
     byId("catalogMetrics").innerHTML = metrics.map((metric) => `
         <article class="catalog-metric metric-${metric.icon}">
             <div class="metric-pixel" aria-hidden="true">
-                ${pixelImg(`/assets/img/pixel-ops/metrics/${metric.icon}.png`)}
+                ${pixelImg(`/assets/img/pixel-ops/metrics/${metric.icon}.webp`)}
                 <span></span>
             </div>
             <div>
@@ -108,7 +69,7 @@ function renderMetrics() {
                 <div class="metric-value">${metric.value}</div>
             </div>
         </article>
-    `).join("") + `<div class="grid-ok-chip">${pixelImg("/assets/img/pixel-ops/ui/grid-ok.png")}<span>GRID</span><strong>OK</strong></div>`;
+    `).join("") + `<div class="grid-ok-chip">${pixelImg("/assets/img/pixel-ops/ui/grid-ok.webp")}<span>GRID</span><strong>OK</strong></div>`;
 }
 
 function renderCard(produto) {
@@ -116,11 +77,12 @@ function renderCard(produto) {
     const location = produto.localizacao_label || friendlyLocation(produto);
     const barcode = produto.codigo_barras || "Sem código";
     const canEnter = produto.status !== "zerado" || true;
+    const icon = productIconName(produto);
     return `
         <article class="product-card ${status.cls}">
             <div class="product-card-top">
-                <div class="pixel-product-icon pixel-${productIconClass(produto)}" aria-hidden="true">
-                    ${pixelImg(`/assets/img/pixel-ops/products/${productIconClass(produto)}.png`)}
+                <div class="pixel-product-icon pixel-${icon}" aria-hidden="true">
+                    ${pixelImg(`/assets/img/pixel-ops/products/${icon}.webp`)}
                     <span></span>
                 </div>
                 <div class="product-badges">${categoryBadge(produto)}${controlBadge(produto)}</div>

@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 import os
 
 from .database import init_db
+from .logging_config import configure_logging
+from .services.auth_utils import csrf_protect
 from .routes.auth import auth_bp
 from .routes.localizacoes import localizacoes_bp
 from .routes.produtos import produtos_bp
@@ -15,14 +17,38 @@ from .routes.importacao import importacao_bp
 from .routes.usuarios import usuarios_bp
 
 
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on", "sim")
+
+
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-change-me")
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        raise RuntimeError("SECRET_KEY não configurada. Defina uma chave forte no arquivo .env.")
+    app.config["SECRET_KEY"] = secret_key
     app.config["DATABASE_PATH"] = os.getenv("DATABASE_PATH", "estoque_v2.db")
     app.config["APP_BASE_URL"] = os.getenv("APP_BASE_URL", "http://127.0.0.1:5000")
+    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", str(8 * 1024 * 1024)))
+    app.config["LOG_LEVEL"] = os.getenv("LOG_LEVEL", "INFO")
+    app.config["LOG_FILE"] = os.getenv("LOG_FILE")
+    app.config["LOG_MAX_BYTES"] = int(os.getenv("LOG_MAX_BYTES", "1000000"))
+    app.config["LOG_BACKUP_COUNT"] = int(os.getenv("LOG_BACKUP_COUNT", "5"))
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+    app.config["SESSION_COOKIE_SECURE"] = env_bool(
+        "SESSION_COOKIE_SECURE",
+        os.getenv("FLASK_ENV") == "production",
+    )
 
+    configure_logging(app)
     init_db(app.config["DATABASE_PATH"])
+
+    app.before_request(csrf_protect)
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(localizacoes_bp, url_prefix="/api/localizacoes")
@@ -77,6 +103,7 @@ def create_app():
 
     @app.errorhandler(500)
     def server_error(err):
+        app.logger.exception("Erro interno do servidor", exc_info=err)
         return jsonify({"ok": False, "error": "Erro interno do servidor."}), 500
 
     return app

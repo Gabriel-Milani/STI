@@ -1,9 +1,9 @@
 from flask import Blueprint, request
 from ..database import get_db, rows_to_list, row_to_dict
 from ..services.auth_utils import login_required, current_user_id
-from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit, location_label
-from ..services.stock_movements import create_mov
-from ..services.unidades import create_units, is_unit_product, sync_product_quantity
+from ..services.helpers import api_ok, api_error, generate_barcode, parse_int, audit, location_label
+from ..services.products import ProductCreateError, ProductValidationError, create_product
+from ..services.unidades import is_unit_product
 
 produtos_bp = Blueprint("produtos", __name__)
 
@@ -70,83 +70,17 @@ def listar():
 @login_required
 def criar():
     data = request.get_json(silent=True) or {}
-    nome = (data.get("nome") or "").strip()
-    if not nome:
-        return api_error("Informe o nome do produto.", 400)
-    quantidade = parse_int(data.get("quantidade_inicial", data.get("quantidade_atual", 0)))
-    minimo = parse_int(data.get("estoque_minimo", 0))
-    tipo_controle = data.get("tipo_controle") or "quantidade"
-    prefixo_rastreio = (data.get("prefixo_rastreio") or "").strip() or None
-    if tipo_controle not in ("quantidade", "unidade"):
-        return api_error("Tipo de controle inválido.", 400)
-    if tipo_controle == "unidade" and not prefixo_rastreio:
-        return api_error("Informe o prefixo de rastreio.", 400)
-    if quantidade < 0:
-        return api_error("Quantidade inicial não pode ser negativa.", 400)
-    if minimo < 0:
-        return api_error("Estoque mínimo não pode ser negativo.", 400)
-
     with get_db() as db:
-        loc_id = data.get("localizacao_id")
-        loc_codigo = data.get("localizacao_codigo")
-        if loc_id:
-            loc = db.execute("SELECT * FROM localizacoes WHERE id = ? AND ativo = 1", (loc_id,)).fetchone()
-        elif loc_codigo:
-            loc = db.execute("SELECT * FROM localizacoes WHERE codigo = ? AND ativo = 1", (loc_codigo,)).fetchone()
-        else:
-            loc = None
-        if not loc:
-            return api_error("Escolha uma localização para o produto.", 400)
-
-        codigo = data.get("codigo") or generate_product_code(db=db)
-        codigo_barras = (data.get("codigo_barras") or "").strip() or generate_barcode(db)
         try:
-            cur = db.execute(
-                """
-                INSERT INTO produtos
-                (codigo, nome, categoria, modelo, codigo_barras, quantidade_atual, estoque_minimo,
-                 tipo_controle, prefixo_rastreio, localizacao_id, observacao, ativo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """,
-                (
-                    codigo,
-                    nome,
-                    data.get("categoria"),
-                    data.get("modelo"),
-                    codigo_barras,
-                    0 if tipo_controle == "unidade" else quantidade,
-                    minimo,
-                    tipo_controle,
-                    prefixo_rastreio,
-                    loc["id"],
-                    data.get("observacao"),
-                ),
-            )
-            produto_id = cur.lastrowid
-            unidades = []
-            produto = db.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,)).fetchone()
-            if tipo_controle == "unidade" and quantidade > 0:
-                unidades = create_units(db, produto, quantidade, "Quantidade inicial")
-                quantidade_depois = sync_product_quantity(db, produto_id)
-            else:
-                quantidade_depois = quantidade
-            if quantidade > 0:
-                create_mov(
-                    db,
-                    produto,
-                    "entrada",
-                    quantidade,
-                    0,
-                    quantidade_depois,
-                    {"recebido_por": data.get("recebido_por") or data.get("operador"), "observacao": "Quantidade inicial"},
-                    unidades,
-                )
-            audit(db, current_user_id(), "criar", "produto", produto_id, codigo)
+            produto = create_product(db, data, current_user_id())
             db.commit()
-            return api_ok({"id": produto_id, "codigo": codigo}, "Produto cadastrado.", 201)
-        except Exception:
+            return api_ok(produto, "Produto cadastrado.", 201)
+        except ProductValidationError as error:
             db.rollback()
-            return api_error("Não foi possível cadastrar. Verifique código interno/código de barras duplicado.", 400)
+            return api_error(error.message, error.status)
+        except ProductCreateError as error:
+            db.rollback()
+            return api_error(error.message, 400)
 
 
 @produtos_bp.get("/<codigo_ou_id>")

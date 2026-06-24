@@ -1,6 +1,9 @@
+import os
+
 from flask import Blueprint, request, session
 from werkzeug.security import check_password_hash
 from ..database import get_db, row_to_dict
+from ..services.auth_utils import csrf_response_data, ensure_csrf_token
 from ..services.helpers import api_ok, api_error
 
 auth_bp = Blueprint("auth", __name__)
@@ -20,6 +23,12 @@ def login():
             return api_error("Usuário ou senha inválidos.", 401)
         if not user["ativo"]:
             return api_error("Usuário inativo. Procure o responsável pelo sistema.", 403)
+        if (
+            os.getenv("FLASK_ENV") == "production"
+            and user["username"] == "admin"
+            and check_password_hash(user["password_hash"], "admin123")
+        ):
+            return api_error("Senha padrão do administrador bloqueada em produção. Altere a senha antes de continuar.", 403)
         db.execute("UPDATE usuarios SET ultimo_login = CURRENT_TIMESTAMP WHERE id = ?", (user["id"],))
         db.commit()
         session["user_id"] = user["id"]
@@ -27,7 +36,11 @@ def login():
         session["username"] = user["username"]
         session["nome"] = user["nome"]
         session["perfil"] = user["perfil"]
-        return api_ok({"user": {"id": user["id"], "username": user["username"], "nome": user["nome"], "perfil": user["perfil"]}})
+        ensure_csrf_token()
+        return api_ok({
+            "user": {"id": user["id"], "username": user["username"], "nome": user["nome"], "perfil": user["perfil"]},
+            **csrf_response_data(),
+        })
 
 
 @auth_bp.post("/logout")
@@ -48,4 +61,4 @@ def me():
         if not user["ativo"]:
             session.clear()
             return api_error("Usuário inativo. Procure o responsável pelo sistema.", 403)
-        return api_ok({"user": row_to_dict(user)})
+        return api_ok({"user": row_to_dict(user), **csrf_response_data()})

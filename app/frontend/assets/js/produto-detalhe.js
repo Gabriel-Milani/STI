@@ -6,45 +6,12 @@ let productUnits = [];
 let selectedMoveShelf = "";
 let editModal = null;
 
-const detailProductIconMap = [
-    ["limpa contato", "contact-cleaner"],
-    ["pasta térmica", "thermal-paste"],
-    ["pasta termica", "thermal-paste"],
-    ["carregador", "charger"],
-    ["toner", "toner"],
-    ["unidade de imagem", "imaging-unit"],
-    ["pm9500", "scanner-battery"],
-    ["bateria", "battery"],
-    ["placa", "pci-card"],
-    ["pci", "pci-card"],
-    ["conversor", "converter"],
-    ["extensor", "extender"],
-    ["lightining", "lightning-cable"],
-    ["lightning", "lightning-cable"],
-    ["base notebook", "notebook-base"],
-    ["mouse", "mouse"],
-    ["teclado", "keyboard"],
-    ["cabo", "cable"],
-    ["hdmi", "cable"],
-    ["display", "cable"],
-    ["hd notebook", "hdd"],
-    ["hdd", "hdd"],
-    ["ssd", "ssd"],
-    ["headset mono", "mono-headset"],
-    ["headset", "headset"],
-    ["fone", "headset"],
-    ["rj45", "adapter"],
-    ["adaptador", "adapter"],
-];
-
 function loggedUserLabel() {
     return (currentUser && (currentUser.nome || currentUser.username)) || "usuário logado";
 }
 
 function productAsset(produto) {
-    const source = `${produto.categoria || ""} ${produto.nome || ""} ${produto.modelo || ""}`.toLowerCase();
-    const found = detailProductIconMap.find(([key]) => source.includes(key));
-    return `/assets/img/pixel-ops/products/${found ? found[1] : "box"}.png`;
+    return `/assets/img/pixel-ops/products/${productIconName(produto)}.webp`;
 }
 
 function movementFields() {

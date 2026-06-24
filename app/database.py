@@ -63,7 +63,7 @@ def backup_database(path: str, backup_dir: str = "backups", retention: int = 20)
 def init_db(path: str = "estoque_v2.db"):
     set_db_path(path)
     Path(path).parent.mkdir(parents=True, exist_ok=True) if Path(path).parent != Path(".") else None
-    if os.getenv("DB_BACKUP_ENABLED", "1").lower() not in ("0", "false", "no", "off"):
+    if os.getenv("DB_BACKUP_ON_START", "0").lower() in ("1", "true", "yes", "on", "sim"):
         backup_database(
             path,
             os.getenv("DB_BACKUP_DIR", "backups"),
@@ -225,9 +225,12 @@ def remove_duplicate_empty_locations(db):
 def seed_default_user(db):
     exists = db.execute("SELECT id FROM usuarios WHERE username = ?", ("admin",)).fetchone()
     if not exists:
+        initial_password = os.getenv("ADMIN_INITIAL_PASSWORD", "admin123")
+        if os.getenv("FLASK_ENV") == "production" and initial_password == "admin123":
+            raise RuntimeError("ADMIN_INITIAL_PASSWORD precisa ser definido com uma senha forte em produção.")
         db.execute(
             "INSERT INTO usuarios (username, nome, password_hash, perfil, ativo) VALUES (?, ?, ?, ?, 1)",
-            ("admin", "Administrador", generate_password_hash("admin123"), "admin"),
+            ("admin", "Administrador", generate_password_hash(initial_password), "admin"),
         )
 
 

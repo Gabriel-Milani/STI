@@ -26,11 +26,49 @@ copy .env.example .env
 python run.py
 ```
 
+Antes de usar em produção, troque `SECRET_KEY`, defina `ADMIN_INITIAL_PASSWORD`
+com uma senha forte e use `SESSION_COOKIE_SECURE=1` se o sistema estiver em HTTPS.
+
+## Operação
+
+Para validar a configuração efetiva:
+
+```bash
+python manage.py check-config
+```
+
+Para criar um backup manual do banco:
+
+```bash
+python manage.py backup-db
+```
+
+Em produção no Windows, prefira rodar com Waitress:
+
+```bash
+python serve.py
+```
+
+Use `.env.production.example` como base para o ambiente de produção.
+
+## Testes
+
+```bash
+python test_flow.py
+```
+
+Para rodar com pytest:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
 ## Primeiro login
 
 ```text
 Usuário: admin
-Senha: admin123
+Senha: valor de ADMIN_INITIAL_PASSWORD no .env
 ```
 
 Troque essa senha antes de usar de verdade.

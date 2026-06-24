@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from werkzeug.security import generate_password_hash
 from ..database import get_db, rows_to_list, row_to_dict
-from ..services.auth_utils import login_required, current_user_id
+from ..services.auth_utils import admin_required, current_user_id
 from ..services.helpers import api_ok, api_error, audit
 
 usuarios_bp = Blueprint("usuarios", __name__)
@@ -26,7 +26,7 @@ def active_users_count(db):
 
 
 @usuarios_bp.get("")
-@login_required
+@admin_required
 def listar():
     with get_db() as db:
         rows = db.execute(
@@ -40,7 +40,7 @@ def listar():
 
 
 @usuarios_bp.post("")
-@login_required
+@admin_required
 def criar():
     data = request.get_json(silent=True) or {}
     nome = (data.get("nome") or "").strip()
@@ -71,7 +71,7 @@ def criar():
 
 
 @usuarios_bp.put("/<int:usuario_id>")
-@login_required
+@admin_required
 def atualizar(usuario_id):
     data = request.get_json(silent=True) or {}
     nome = (data.get("nome") or "").strip()
@@ -100,7 +100,7 @@ def atualizar(usuario_id):
 
 
 @usuarios_bp.post("/<int:usuario_id>/desativar")
-@login_required
+@admin_required
 def desativar(usuario_id):
     with get_db() as db:
         user = db.execute("SELECT * FROM usuarios WHERE id = ?", (usuario_id,)).fetchone()
@@ -117,7 +117,7 @@ def desativar(usuario_id):
 
 
 @usuarios_bp.post("/<int:usuario_id>/ativar")
-@login_required
+@admin_required
 def ativar(usuario_id):
     with get_db() as db:
         user = db.execute("SELECT * FROM usuarios WHERE id = ?", (usuario_id,)).fetchone()
@@ -130,7 +130,7 @@ def ativar(usuario_id):
 
 
 @usuarios_bp.post("/<int:usuario_id>/resetar-senha")
-@login_required
+@admin_required
 def resetar_senha(usuario_id):
     data = request.get_json(silent=True) or {}
     senha = data.get("senha") or data.get("nova_senha") or ""

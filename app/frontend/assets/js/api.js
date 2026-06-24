@@ -5,6 +5,11 @@ const Api = (() => {
             headers: {},
             ...options,
         };
+        const method = String(init.method || "GET").toUpperCase();
+        const csrfToken = sessionStorage.getItem(AUTH_CSRF_KEY);
+        if (csrfToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+            init.headers["X-CSRF-Token"] = csrfToken;
+        }
         if (init.body && !(init.body instanceof FormData)) {
             init.headers["Content-Type"] = "application/json";
             init.body = JSON.stringify(init.body);
@@ -32,6 +37,16 @@ const Api = (() => {
 let currentUser = null;
 
 const AUTH_CACHE_KEY = "estoqueTi.currentUser";
+const AUTH_CSRF_KEY = "estoqueTi.csrfToken";
+
+function cacheAuthData(data) {
+    if (data.user) {
+        sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data.user));
+    }
+    if (data.csrf_token) {
+        sessionStorage.setItem(AUTH_CSRF_KEY, data.csrf_token);
+    }
+}
 
 function byId(id) {
     return document.getElementById(id);
@@ -117,6 +132,47 @@ function sortLocations(locations) {
         String(a.prateleira || "").localeCompare(String(b.prateleira || ""), "pt-BR", { numeric: true }) ||
         String(a.nome || a.localizacao_nome || "").localeCompare(String(b.nome || b.localizacao_nome || ""), "pt-BR", { numeric: true })
     );
+}
+
+const PRODUCT_ICON_MAP = [
+    ["limpa contato", "contact-cleaner"],
+    ["pasta térmica", "thermal-paste"],
+    ["pasta termica", "thermal-paste"],
+    ["carregador", "charger"],
+    ["toner", "toner"],
+    ["unidade de imagem", "imaging-unit"],
+    ["pm9500", "scanner-battery"],
+    ["bateria", "battery"],
+    ["placa", "pci-card"],
+    ["pci", "pci-card"],
+    ["conversor", "converter"],
+    ["extensor", "extender"],
+    ["lightining", "lightning-cable"],
+    ["lightning", "lightning-cable"],
+    ["base notebook", "notebook-base"],
+    ["teclado", "keyboard"],
+    ["mouse", "mouse"],
+    ["hdmi", "cable"],
+    ["display", "cable"],
+    ["cabo", "cable"],
+    ["monitor", "ssd"],
+    ["fonte", "adapter"],
+    ["hd notebook", "hdd"],
+    ["hdd", "hdd"],
+    ["rj45", "adapter"],
+    ["rede", "adapter"],
+    ["headset mono", "mono-headset"],
+    ["fone", "headset"],
+    ["headset", "headset"],
+    ["ssd", "ssd"],
+    ["adaptador", "adapter"],
+    ["limpeza", "box"],
+];
+
+function productIconName(item) {
+    const source = `${item?.categoria || ""} ${item?.nome || ""} ${item?.modelo || ""}`.toLowerCase();
+    const found = PRODUCT_ICON_MAP.find(([key]) => source.includes(key));
+    return found ? found[1] : "box";
 }
 
 function formatDate(value) {
@@ -257,29 +313,32 @@ function mountPageHeader(active) {
 
 async function requireAuth() {
     const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
-    if (cached) {
+    const cachedCsrf = sessionStorage.getItem(AUTH_CSRF_KEY);
+    if (cached && cachedCsrf) {
         try {
             currentUser = JSON.parse(cached);
             renderUserShell(currentUser);
             Api.get("/api/auth/me")
                 .then(({ data }) => {
                     currentUser = data.user;
-                    sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data.user));
+                    cacheAuthData(data);
                     renderUserShell(data.user);
                 })
                 .catch(() => {
                     sessionStorage.removeItem(AUTH_CACHE_KEY);
+                    sessionStorage.removeItem(AUTH_CSRF_KEY);
                     if (window.location.pathname !== "/login") window.location.href = "/login";
                 });
             return currentUser;
         } catch (_error) {
             sessionStorage.removeItem(AUTH_CACHE_KEY);
+            sessionStorage.removeItem(AUTH_CSRF_KEY);
         }
     }
     try {
         const { data } = await Api.get("/api/auth/me");
         currentUser = data.user;
-        sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data.user));
+        cacheAuthData(data);
         renderUserShell(data.user);
         return data.user;
     } catch (error) {
@@ -303,7 +362,7 @@ function mountNav(active) {
         brand.className = "app-sidebar-brand";
         brand.innerHTML = `
             <div class="app-sidebar-logo">
-                <img class="pixel-asset-img" src="/assets/img/pixel-ops/ui/logo-monitor.png" alt="" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                <img class="pixel-asset-img" src="/assets/img/pixel-ops/ui/logo-monitor.webp" alt="" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
                 <span></span>
             </div>
             <div class="app-sidebar-title">ESTOQUE TI</div>
@@ -314,7 +373,7 @@ function mountNav(active) {
         userPanel.innerHTML = `
             <div class="sidebar-user-card">
                 <div class="sidebar-user-avatar">
-                    <img class="pixel-asset-img" src="/assets/img/pixel-ops/ui/admin-avatar.png" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                    <img class="pixel-asset-img" src="/assets/img/pixel-ops/ui/admin-avatar.webp" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
                     <span>▣</span>
                 </div>
                 <div class="sidebar-user-copy">
@@ -341,7 +400,7 @@ function mountNav(active) {
     nav.innerHTML = items.map(([key, href, label, icon]) =>
         `<a class="nav-link ${key === active ? "active" : ""}" href="${href}">
             <span class="nav-pixel-icon">
-                <img class="pixel-asset-img" src="/assets/img/pixel-ops/nav/${key}.png" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                <img class="pixel-asset-img" src="/assets/img/pixel-ops/nav/${key}.webp" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
                 <span>${icon}</span>
             </span>${label}
         </a>`
@@ -351,6 +410,7 @@ function mountNav(active) {
 async function logout() {
     await Api.post("/api/auth/logout", {});
     sessionStorage.removeItem(AUTH_CACHE_KEY);
+    sessionStorage.removeItem(AUTH_CSRF_KEY);
     window.location.href = "/login";
 }
 
