@@ -68,6 +68,28 @@ def take_available_units(db, produto_id, quantidade):
     return rows
 
 
+def selected_available_units(db, produto_id, codigos):
+    clean_codes = []
+    for codigo in codigos or []:
+        value = str(codigo or "").strip()
+        if value and value not in clean_codes:
+            clean_codes.append(value)
+    if not clean_codes:
+        return []
+
+    placeholders = ",".join(["?"] * len(clean_codes))
+    rows = db.execute(
+        f"""
+        SELECT * FROM produto_unidades
+        WHERE produto_id = ? AND codigo_unidade IN ({placeholders})
+        ORDER BY id
+        """,
+        [produto_id, *clean_codes],
+    ).fetchall()
+    by_code = {row["codigo_unidade"]: row for row in rows}
+    return [by_code.get(codigo) for codigo in clean_codes if by_code.get(codigo)]
+
+
 def change_units_status(db, units, status):
     changed = []
     for unit in units:

@@ -4,22 +4,47 @@ let products = [];
 let activeFilter = "todos";
 let activeLocationsCount = 0;
 
-const categoryIcons = [
-    ["mouse", "▣"],
-    ["teclado", "⌨"],
-    ["cabo", "⌁"],
-    ["fone", "◖"],
-    ["headset", "◖"],
-    ["ssd", "▤"],
-    ["bateria", "▥"],
-    ["impressora", "▦"],
-    ["limpeza", "✦"],
+const categoryIconMap = [
+    ["limpa contato", "contact-cleaner"],
+    ["pasta térmica", "thermal-paste"],
+    ["pasta termica", "thermal-paste"],
+    ["carregador", "charger"],
+    ["toner", "toner"],
+    ["unidade de imagem", "imaging-unit"],
+    ["pm9500", "scanner-battery"],
+    ["bateria", "battery"],
+    ["placa", "pci-card"],
+    ["pci", "pci-card"],
+    ["conversor", "converter"],
+    ["extensor", "extender"],
+    ["lightining", "lightning-cable"],
+    ["lightning", "lightning-cable"],
+    ["base notebook", "notebook-base"],
+    ["mouse", "mouse"],
+    ["teclado", "keyboard"],
+    ["cabo", "cable"],
+    ["hdmi", "cable"],
+    ["display", "cable"],
+    ["hd notebook", "hdd"],
+    ["hdd", "hdd"],
+    ["rj45", "adapter"],
+    ["rede", "adapter"],
+    ["headset mono", "mono-headset"],
+    ["fone", "headset"],
+    ["headset", "headset"],
+    ["ssd", "ssd"],
+    ["adaptador", "adapter"],
+    ["limpeza", "box"],
 ];
 
-function productIcon(produto) {
-    const source = `${produto.categoria || ""} ${produto.nome || ""}`.toLowerCase();
-    const found = categoryIcons.find(([key]) => source.includes(key));
-    return found ? found[1] : "◆";
+function pixelImg(src, alt = "") {
+    return `<img class="pixel-asset-img" src="${src}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">`;
+}
+
+function productIconClass(produto) {
+    const source = `${produto.categoria || ""} ${produto.nome || ""} ${produto.modelo || ""}`.toLowerCase();
+    const found = categoryIconMap.find(([key]) => source.includes(key));
+    return found ? found[1] : "box";
 }
 
 function controlBadge(produto) {
@@ -33,10 +58,10 @@ function categoryBadge(produto) {
 
 function statusMeta(status) {
     return {
-        ok: { label: "Ok", cls: "status-ok-card" },
-        baixo: { label: "Baixo", cls: "status-low-card" },
-        zerado: { label: "Zerado", cls: "status-zero-card" },
-    }[status] || { label: "Ok", cls: "status-ok-card" };
+        ok: { label: "OK", cls: "status-ok-card", icon: "▣" },
+        baixo: { label: "BAIXO", cls: "status-low-card", icon: "⚠" },
+        zerado: { label: "ZERADO", cls: "status-zero-card", icon: "⊘" },
+    }[status] || { label: "OK", cls: "status-ok-card", icon: "▣" };
 }
 
 function productMatchesFilter(produto) {
@@ -55,59 +80,81 @@ function movementLink(produto, type) {
 function renderEmpty() {
     return `
         <div class="catalog-empty">
-            <div class="empty-pixel">◇</div>
+            <div class="empty-terminal">
+                <div class="empty-face">▣</div>
+            </div>
             <h2 class="h5 mb-1">Nenhum produto encontrado</h2>
-            <div class="text-secondary mb-3">Tente outro filtro ou cadastre um novo item.</div>
-            <a class="btn catalog-new-empty" href="/produtos/novo">Novo produto</a>
+            <div class="text-secondary mb-3">Tente outro filtro ou cadastre um novo item no catálogo STI.</div>
+            <a class="btn catalog-new-empty" href="/produtos/novo">＋ Novo produto</a>
         </div>
     `;
 }
 
 function renderMetrics() {
     const metrics = [
-        { label: "Total de produtos", value: products.length, icon: "▦" },
-        { label: "Estoque baixo", value: products.filter((p) => p.status === "baixo").length, icon: "▧" },
-        { label: "Unidades rastreáveis", value: products.filter((p) => p.tipo_controle === "unidade").length, icon: "◇" },
-        { label: "Localizações ativas", value: activeLocationsCount, icon: "⌁" },
+        { label: "Total de produtos", value: products.length, icon: "box" },
+        { label: "Estoque baixo", value: products.filter((p) => p.status === "baixo").length, icon: "warn" },
+        { label: "Unidades rastreáveis", value: products.filter((p) => p.tipo_controle === "unidade").length, icon: "target" },
+        { label: "Localizações ativas", value: activeLocationsCount, icon: "pin" },
     ];
     byId("catalogMetrics").innerHTML = metrics.map((metric) => `
-        <div class="catalog-metric">
-            <div class="metric-pixel">${metric.icon}</div>
-            <div>
-                <div class="metric-value">${metric.value}</div>
-                <div class="metric-label">${escapeHtml(metric.label)}</div>
+        <article class="catalog-metric metric-${metric.icon}">
+            <div class="metric-pixel" aria-hidden="true">
+                ${pixelImg(`/assets/img/pixel-ops/metrics/${metric.icon}.png`)}
+                <span></span>
             </div>
-        </div>
-    `).join("");
+            <div>
+                <div class="metric-label">${escapeHtml(metric.label)}</div>
+                <div class="metric-value">${metric.value}</div>
+            </div>
+        </article>
+    `).join("") + `<div class="grid-ok-chip">${pixelImg("/assets/img/pixel-ops/ui/grid-ok.png")}<span>GRID</span><strong>OK</strong></div>`;
 }
 
 function renderCard(produto) {
     const status = statusMeta(produto.status);
     const location = produto.localizacao_label || friendlyLocation(produto);
+    const barcode = produto.codigo_barras || "Sem código";
+    const canEnter = produto.status !== "zerado" || true;
     return `
         <article class="product-card ${status.cls}">
             <div class="product-card-top">
-                <div class="pixel-icon" aria-hidden="true">${productIcon(produto)}</div>
+                <div class="pixel-product-icon pixel-${productIconClass(produto)}" aria-hidden="true">
+                    ${pixelImg(`/assets/img/pixel-ops/products/${productIconClass(produto)}.png`)}
+                    <span></span>
+                </div>
                 <div class="product-badges">${categoryBadge(produto)}${controlBadge(produto)}</div>
             </div>
+
             <div class="product-card-body">
                 <h2 class="product-name">${escapeHtml(produto.nome)}</h2>
-                <div class="product-model">${escapeHtml(produto.modelo || "Modelo não informado")}</div>
+                <div class="product-model">Modelo: ${escapeHtml(produto.modelo || "Não informado")}</div>
+
                 <div class="product-codes">
-                    <span>${escapeHtml(produto.codigo)}</span>
-                    ${produto.codigo_barras ? `<span>${escapeHtml(produto.codigo_barras)}</span>` : ""}
+                    <div class="code-cell">
+                        <span>Código int.</span>
+                        <strong>${escapeHtml(produto.codigo)}</strong>
+                    </div>
+                    <div class="code-cell barcode-cell">
+                        <span>Cód. barras</span>
+                        <strong>${escapeHtml(barcode)}</strong>
+                        <i class="fake-barcode"></i>
+                    </div>
                 </div>
-                <div class="product-location">${escapeHtml(location)}</div>
+
+                <div class="product-location">Localização: ${escapeHtml(location)}</div>
             </div>
+
             <div class="stock-strip">
-                <div><span class="stock-number">${produto.quantidade_atual}</span><span class="stock-label"> atual</span></div>
-                <div><span class="stock-min">${produto.estoque_minimo}</span><span class="stock-label"> mínimo</span></div>
-                <span class="stock-status">${status.label}</span>
+                <div class="stock-info"><span class="stock-label">Atual</span><strong>${produto.quantidade_atual}</strong></div>
+                <div class="stock-info"><span class="stock-label">Mínimo</span><strong>${produto.estoque_minimo}</strong></div>
+                <div class="stock-info status-box"><span class="stock-label">Status</span><strong>${status.label}</strong></div>
             </div>
+
             <div class="product-actions">
-                <a class="btn btn-primary btn-sm" href="/produtos/${encodeURIComponent(produto.codigo)}">Ver produto</a>
-                <a class="btn btn-outline-success btn-sm" href="${movementLink(produto, "entrada")}">Entrada</a>
-                <a class="btn btn-outline-danger btn-sm" href="${movementLink(produto, "retirada")}">Retirada</a>
+                <a class="btn action-view" href="/produtos/${encodeURIComponent(produto.codigo)}">Ver produto</a>
+                <a class="btn action-entry ${canEnter ? "" : "disabled"}" href="${movementLink(produto, "entrada")}">↓ Entrada</a>
+                <a class="btn action-exit" href="${movementLink(produto, "retirada")}">↑ Retirada</a>
             </div>
         </article>
     `;
@@ -127,14 +174,19 @@ async function loadProducts(query = "") {
 }
 
 (async function init() {
-    await requireAuth();
     try {
-        const { data } = await Api.get("/api/localizacoes");
-        activeLocationsCount = data.localizacoes.length;
-    } catch (_error) {
+        const [, locationsResponse, productsResponse] = await Promise.all([
+            requireAuth(),
+            Api.get("/api/localizacoes").catch(() => null),
+            Api.get("/api/produtos"),
+        ]);
+        activeLocationsCount = locationsResponse ? locationsResponse.data.localizacoes.length : 0;
+        products = productsResponse.data.produtos;
+        renderProducts();
+    } catch (error) {
         activeLocationsCount = 0;
+        setAlert(error.message, "danger");
     }
-    await loadProducts();
     const toast = sessionStorage.getItem("productToast");
     if (toast) {
         sessionStorage.removeItem("productToast");

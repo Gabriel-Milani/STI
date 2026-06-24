@@ -1,5 +1,9 @@
 import sqlite3
+import re
+import unicodedata
+import os
 from pathlib import Path
+from datetime import datetime
 from werkzeug.security import generate_password_hash
 
 _db_path = "estoque_v2.db"
@@ -25,14 +29,52 @@ def rows_to_list(rows):
     return [dict(r) for r in rows]
 
 
+def backup_database(path: str, backup_dir: str = "backups", retention: int = 20):
+    source_path = Path(path)
+    if str(path) == ":memory:" or not source_path.exists() or source_path.stat().st_size == 0:
+        return None
+
+    target_dir = Path(backup_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    suffix = source_path.suffix or ".db"
+    target_path = target_dir / f"{source_path.stem}-{timestamp}{suffix}"
+
+    source = sqlite3.connect(source_path)
+    try:
+        target = sqlite3.connect(target_path)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+
+    backups = sorted(
+        target_dir.glob(f"{source_path.stem}-*{suffix}"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    for old_backup in backups[retention:]:
+        old_backup.unlink(missing_ok=True)
+    return target_path
+
+
 def init_db(path: str = "estoque_v2.db"):
     set_db_path(path)
     Path(path).parent.mkdir(parents=True, exist_ok=True) if Path(path).parent != Path(".") else None
+    if os.getenv("DB_BACKUP_ENABLED", "1").lower() not in ("0", "false", "no", "off"):
+        backup_database(
+            path,
+            os.getenv("DB_BACKUP_DIR", "backups"),
+            int(os.getenv("DB_BACKUP_RETENTION", "20")),
+        )
     with get_db() as db:
         db.executescript(SCHEMA)
         apply_migrations(db)
         seed_default_user(db)
         seed_default_locations(db)
+        remove_duplicate_empty_locations(db)
         db.commit()
 
 
@@ -41,8 +83,6 @@ def has_column(db, table, column):
 
 
 def apply_migrations(db):
-    if has_column(db, "produtos", "marca"):
-        db.execute("ALTER TABLE produtos DROP COLUMN marca")
     if not has_column(db, "produtos", "tipo_controle"):
         db.execute("ALTER TABLE produtos ADD COLUMN tipo_controle TEXT NOT NULL DEFAULT 'quantidade'")
     if not has_column(db, "produtos", "prefixo_rastreio"):
@@ -76,6 +116,110 @@ def apply_migrations(db):
             if len(value) == 8 and value[0] == "P" and value[1:].isdigit():
                 maior = max(maior, int(value[1:]))
         db.execute("INSERT INTO codigo_barras_sequence (id, last_value) VALUES (1, ?)", (maior,))
+    normalize_legacy_product_codes(db)
+
+
+def normalize_legacy_product_codes(db):
+    legacy_rows = db.execute(
+        "SELECT id, codigo FROM produtos WHERE codigo LIKE 'PROD-%' ORDER BY id"
+    ).fetchall()
+    if not legacy_rows:
+        return
+
+    used_codes = {
+        (row["codigo"] or "").upper(): row["id"]
+        for row in db.execute("SELECT id, codigo FROM produtos").fetchall()
+    }
+    fallback_number = 1
+
+    for row in legacy_rows:
+        candidate = f"P{row['id']:05d}"
+        owner = used_codes.get(candidate)
+        if owner and owner != row["id"]:
+            while True:
+                candidate = f"P{fallback_number:05d}"
+                owner = used_codes.get(candidate)
+                fallback_number += 1
+                if not owner or owner == row["id"]:
+                    break
+
+        used_codes.pop((row["codigo"] or "").upper(), None)
+        used_codes[candidate] = row["id"]
+        db.execute(
+            "UPDATE produtos SET codigo = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",
+            (candidate, row["id"]),
+        )
+
+
+def location_slug(value):
+    text = unicodedata.normalize("NFKD", value or "")
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").upper()
+    return text or "AREA"
+
+
+def normalize_location_codes(db):
+    rows = db.execute(
+        """
+        SELECT id, codigo, nome, armario, prateleira
+        FROM localizacoes
+        ORDER BY armario, prateleira, ordem, id
+        """
+    ).fetchall()
+    if not rows:
+        return
+
+    used_codes = {}
+    for row in rows:
+        base_code = f"{row['armario'].strip().upper()}-{row['prateleira'].strip().upper()}-{location_slug(row['nome'])}"
+        candidate = base_code
+        suffix = 2
+        while candidate in used_codes:
+            candidate = f"{base_code}-{suffix:02d}"
+            suffix += 1
+        used_codes[candidate] = row["id"]
+        if candidate != row["codigo"]:
+            db.execute("UPDATE localizacoes SET codigo = ? WHERE id = ?", (candidate, row["id"]))
+
+
+def location_reference_count(db, location_id):
+    return sum([
+        db.execute("SELECT COUNT(*) AS total FROM produtos WHERE localizacao_id = ?", (location_id,)).fetchone()["total"],
+        db.execute("SELECT COUNT(*) AS total FROM produto_unidades WHERE localizacao_id = ?", (location_id,)).fetchone()["total"],
+        db.execute("SELECT COUNT(*) AS total FROM movimentacoes WHERE localizacao_origem_id = ?", (location_id,)).fetchone()["total"],
+        db.execute("SELECT COUNT(*) AS total FROM movimentacoes WHERE localizacao_destino_id = ?", (location_id,)).fetchone()["total"],
+    ])
+
+
+def remove_duplicate_empty_locations(db):
+    groups = db.execute(
+        """
+        SELECT nome, COALESCE(descricao, '') AS descricao, armario, prateleira, ordem, ativo, COUNT(*) AS total
+        FROM localizacoes
+        GROUP BY nome, COALESCE(descricao, ''), armario, prateleira, ordem, ativo
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    for group in groups:
+        rows = db.execute(
+            """
+            SELECT id
+            FROM localizacoes
+            WHERE nome = ?
+              AND COALESCE(descricao, '') = ?
+              AND armario = ?
+              AND prateleira = ?
+              AND ordem = ?
+              AND ativo = ?
+            ORDER BY id
+            """,
+            (group["nome"], group["descricao"], group["armario"], group["prateleira"], group["ordem"], group["ativo"]),
+        ).fetchall()
+        scored = [(location_reference_count(db, row["id"]), row["id"]) for row in rows]
+        keep_id = sorted(scored, key=lambda item: (-item[0], item[1]))[0][1]
+        for refs, location_id in scored:
+            if location_id != keep_id and refs == 0:
+                db.execute("DELETE FROM localizacoes WHERE id = ?", (location_id,))
 
 
 def seed_default_user(db):
@@ -106,23 +250,23 @@ def seed_default_locations(db):
         )
 
     locais = [
-        ("ARM01-P1-LIMPEZA", "Limpeza e Pasta Térmica", "Limpa contato e pasta térmica", "ARM01", "P1", 1),
-        ("ARM01-P1-LEITORES", "Leitores e Scanner", "Leitores de código de barras, scanner e acessórios", "ARM01", "P1", 2),
+        ("ARM01-P1-LIMPEZA-E-PASTA-TERMICA", "Limpeza e Pasta Térmica", "Limpa contato e pasta térmica", "ARM01", "P1", 1),
+        ("ARM01-P1-LEITORES-E-SCANNER", "Leitores e Scanner", "Leitores de código de barras, scanner e acessórios", "ARM01", "P1", 2),
         ("ARM01-P2-CABOS-TELEFONE", "Cabos Telefone", "Cabos RJ11, telefone e derivados", "ARM01", "P2", 1),
-        ("ARM01-P2-CABOS-REDE", "Cabos de Rede", "Cabos RJ45 e rede diversos", "ARM01", "P2", 2),
+        ("ARM01-P2-CABOS-DE-REDE", "Cabos de Rede", "Cabos RJ45 e rede diversos", "ARM01", "P2", 2),
         ("ARM01-P2-DIVERSOS", "Diversos", "Fitas, USB serial e dispositivos diversos", "ARM01", "P2", 3),
         ("ARM01-P3-BATERIAS", "Baterias", "Baterias e pilhas", "ARM01", "P3", 1),
         ("ARM01-P3-SSDS", "SSDs", "SSDs SATA/NVMe e armazenamento", "ARM01", "P3", 2),
-        ("ARM01-P3-ADAPTADORES", "Adaptadores de Rede", "Adaptadores USB/RJ45 e rede", "ARM01", "P3", 3),
-        ("ARM01-P4-DPHDMI", "Cabos DP/HDMI", "Cabos DisplayPort, HDMI e conversores de vídeo", "ARM01", "P4", 1),
-        ("ARM01-P4-MOUSE", "Mouses", "Mouses com fio e sem fio", "ARM01", "P4", 2),
-        ("ARM01-P4-ADAPTADORES", "Adaptadores + HDMI em Caixa", "Adaptadores e HDMI embalados", "ARM01", "P4", 3),
+        ("ARM01-P3-ADAPTADORES-DE-REDE", "Adaptadores de Rede", "Adaptadores USB/RJ45 e rede", "ARM01", "P3", 3),
+        ("ARM01-P4-CABOS-DP-HDMI", "Cabos DP/HDMI", "Cabos DisplayPort, HDMI e conversores de vídeo", "ARM01", "P4", 1),
+        ("ARM01-P4-MOUSES", "Mouses", "Mouses com fio e sem fio", "ARM01", "P4", 2),
+        ("ARM01-P4-ADAPTADORES-HDMI-EM-CAIXA", "Adaptadores + HDMI em Caixa", "Adaptadores e HDMI embalados", "ARM01", "P4", 3),
         ("ARM01-P5-FONES", "Fones", "Fones e headsets", "ARM01", "P5", 1),
-        ("ARM01-P5-IMPRESSORA", "Cabos Impressora", "Cabos e acessórios de impressora", "ARM01", "P5", 2),
+        ("ARM01-P5-CABOS-IMPRESSORA", "Cabos Impressora", "Cabos e acessórios de impressora", "ARM01", "P5", 2),
         ("ARM01-P5-DIVERSOS", "Diversos", "Itens diversos da prateleira 5", "ARM01", "P5", 3),
         ("ARM01-P6-TECLADOS", "Teclados", "Teclados USB e sem fio", "ARM01", "P6", 1),
         ("ARM01-P6-CABOS", "Cabos", "Cabos avulsos", "ARM01", "P6", 2),
-        ("ARM01-P6-IMPRESSORA", "Toner, Fusor e Bases HP", "Suprimentos e peças de impressora HP", "ARM01", "P6", 3),
+        ("ARM01-P6-TONER-FUSOR-E-BASES-HP", "Toner, Fusor e Bases HP", "Suprimentos e peças de impressora HP", "ARM01", "P6", 3),
     ]
     for codigo, nome, desc, armario, prateleira, ordem in locais:
         db.execute(

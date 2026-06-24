@@ -1,17 +1,6 @@
 mountNav("scanner");
 
-function renderProduct(produto) {
-    return `
-        <div class="card shadow-sm"><div class="card-body">
-            <div class="d-flex flex-wrap justify-content-between gap-3">
-                <div>
-                    <h2 class="h4 mb-1"><a href="/produtos/${encodeURIComponent(produto.codigo)}">${escapeHtml(produto.nome)}</a></h2>
-                    <div class="text-secondary">${escapeHtml(produto.codigo)} · ${escapeHtml(produto.localizacao_label)}</div>
-                </div>
-                <div class="text-end"><div class="fs-3 fw-semibold">${produto.quantidade_atual}</div><div class="text-secondary small">unidades</div></div>
-            </div>
-        </div></div>`;
-}
+let lastError = { code: "", at: 0 };
 
 function renderLocation(localizacao, produtos) {
     return `
@@ -24,34 +13,64 @@ function renderLocation(localizacao, produtos) {
         </div></div>`;
 }
 
-function renderUnit(unidade) {
-    return `
-        <div class="card shadow-sm"><div class="card-body">
-            <div class="d-flex flex-wrap justify-content-between gap-3">
-                <div>
-                    <h2 class="h4 mb-1"><a href="/produtos/${encodeURIComponent(unidade.produto_codigo)}">${escapeHtml(unidade.produto_nome)}</a></h2>
-                    <div class="text-secondary">${escapeHtml(unidade.codigo_unidade)} · ${escapeHtml(unidade.localizacao_label)}</div>
-                </div>
-                <div class="text-end"><div class="badge bg-secondary fs-6">${escapeHtml(unidade.status)}</div><div class="text-secondary small mt-2">unidade rastreável</div></div>
-            </div>
-        </div></div>`;
+function cleanScanCode(value) {
+    return String(value || "")
+        .replace(/[\u0000-\u001F\u007F]/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toUpperCase();
+}
+
+function shouldShowScanError(code) {
+    const now = Date.now();
+    if (lastError.code === code && now - lastError.at < 1500) return false;
+    lastError = { code, at: now };
+    return true;
+}
+
+function productUrlFromScan(data) {
+    if (data.tipo === "produto") {
+        return `/produtos/${encodeURIComponent(data.produto.codigo)}`;
+    }
+    if (data.tipo === "unidade") {
+        const productCode = encodeURIComponent(data.unidade.produto_codigo);
+        const unitCode = encodeURIComponent(data.unidade.codigo_unidade);
+        return `/produtos/${productCode}?unidade=${unitCode}`;
+    }
+    return null;
+}
+
+function focusScannerInput(form) {
+    const input = form.querySelector("[name='codigo']");
+    input.value = "";
+    input.focus();
 }
 
 (async function init() {
     await requireAuth();
-    byId("scanForm").addEventListener("submit", async (event) => {
+    const form = byId("scanForm");
+    form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const codigo = new FormData(event.currentTarget).get("codigo");
+        const codigo = cleanScanCode(new FormData(form).get("codigo"));
+        if (!codigo || codigo.length < 2) {
+            focusScannerInput(form);
+            return;
+        }
+
         try {
             const { data } = await Api.get(`/api/scanner/buscar/${encodeURIComponent(codigo)}`);
-            byId("scanResult").innerHTML = data.tipo === "produto"
-                ? renderProduct(data.produto)
-                : data.tipo === "unidade"
-                    ? renderUnit(data.unidade)
-                    : renderLocation(data.localizacao, data.produtos);
+            const url = productUrlFromScan(data);
+            if (url) {
+                window.location.assign(url);
+                return;
+            }
+            byId("scanResult").innerHTML = renderLocation(data.localizacao, data.produtos);
         } catch (error) {
-            byId("scanResult").innerHTML = "";
-            setAlert(error.message, "danger");
+            if (shouldShowScanError(codigo)) {
+                setAlert(error.message, "danger");
+            }
+        } finally {
+            focusScannerInput(form);
         }
     });
 })();

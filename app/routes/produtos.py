@@ -1,8 +1,9 @@
 from flask import Blueprint, request
 from ..database import get_db, rows_to_list, row_to_dict
-from ..services.auth_utils import login_required, current_user_id, current_user_name
+from ..services.auth_utils import login_required, current_user_id
 from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit, location_label
-from ..services.unidades import attach_units_to_mov, create_units, is_unit_product, sync_product_quantity
+from ..services.stock_movements import create_mov
+from ..services.unidades import create_units, is_unit_product, sync_product_quantity
 
 produtos_bp = Blueprint("produtos", __name__)
 
@@ -42,7 +43,10 @@ def listar():
         where.append("p.quantidade_atual <= p.estoque_minimo")
 
     sql = f"""
-        SELECT p.*, l.codigo AS localizacao_codigo, l.nome AS localizacao_nome, l.armario, l.prateleira
+        SELECT
+            p.id, p.codigo, p.nome, p.categoria, p.modelo, p.codigo_barras,
+            p.quantidade_atual, p.estoque_minimo, p.tipo_controle,
+            l.codigo AS localizacao_codigo, l.nome AS localizacao_nome, l.armario, l.prateleira
         FROM produtos p
         JOIN localizacoes l ON l.id = p.localizacao_id
         WHERE {' AND '.join(where)}
@@ -94,7 +98,7 @@ def criar():
         if not loc:
             return api_error("Escolha uma localização para o produto.", 400)
 
-        codigo = data.get("codigo") or generate_product_code(nome)
+        codigo = data.get("codigo") or generate_product_code(db=db)
         codigo_barras = (data.get("codigo_barras") or "").strip() or generate_barcode(db)
         try:
             cur = db.execute(
@@ -120,33 +124,23 @@ def criar():
             )
             produto_id = cur.lastrowid
             unidades = []
+            produto = db.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,)).fetchone()
             if tipo_controle == "unidade" and quantidade > 0:
-                produto = db.execute("SELECT * FROM produtos WHERE id = ?", (produto_id,)).fetchone()
                 unidades = create_units(db, produto, quantidade, "Quantidade inicial")
                 quantidade_depois = sync_product_quantity(db, produto_id)
             else:
                 quantidade_depois = quantidade
             if quantidade > 0:
-                mov = db.execute(
-                    """
-                    INSERT INTO movimentacoes
-                    (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, responsavel_origem,
-                     observacao, unidades_codigos, localizacao_destino_id, usuario_id)
-                    VALUES (?, 'entrada', ?, 0, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        produto_id,
-                        quantidade,
-                        quantidade_depois,
-                        data.get("recebido_por") or data.get("operador") or current_user_name(),
-                        "Quantidade inicial",
-                        ",".join([u["codigo_unidade"] for u in unidades]) if unidades else None,
-                        loc["id"],
-                        current_user_id(),
-                    ),
+                create_mov(
+                    db,
+                    produto,
+                    "entrada",
+                    quantidade,
+                    0,
+                    quantidade_depois,
+                    {"recebido_por": data.get("recebido_por") or data.get("operador"), "observacao": "Quantidade inicial"},
+                    unidades,
                 )
-                if unidades:
-                    attach_units_to_mov(db, mov.lastrowid, unidades)
             audit(db, current_user_id(), "criar", "produto", produto_id, codigo)
             db.commit()
             return api_ok({"id": produto_id, "codigo": codigo}, "Produto cadastrado.", 201)

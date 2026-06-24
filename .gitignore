@@ -8,4 +8,5 @@ instance/
 __pycache__/
 *.pyc
 backups/*.db
+tmp/
 .vscode/

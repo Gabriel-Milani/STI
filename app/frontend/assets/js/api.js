@@ -31,12 +31,18 @@ const Api = (() => {
 
 let currentUser = null;
 
+const AUTH_CACHE_KEY = "estoqueTi.currentUser";
+
 function byId(id) {
     return document.getElementById(id);
 }
 
 function formDataObject(form) {
-    const data = Object.fromEntries(new FormData(form).entries());
+    const target = form instanceof HTMLFormElement ? form : form?.closest?.("form");
+    if (!target) {
+        throw new TypeError("formDataObject precisa receber um formulário ou um elemento dentro dele.");
+    }
+    const data = Object.fromEntries(new FormData(target).entries());
     Object.keys(data).forEach((key) => {
         if (data[key] === "") data[key] = null;
     });
@@ -122,12 +128,159 @@ function pageCodeFromPath() {
     return decodeURIComponent(window.location.pathname.split("/").filter(Boolean).pop() || "");
 }
 
+function renderUserShell(user) {
+    if (!user) return;
+    const name = user.nome || user.username || "Operador";
+    const role = user.perfil || "ADMIN";
+    document.querySelectorAll("[data-user-name], #userLabel").forEach((item) => {
+        item.textContent = name;
+    });
+    document.querySelectorAll("[data-user-role]").forEach((item) => {
+        item.textContent = role;
+    });
+}
+
+function currentPageMeta(active) {
+    const path = window.location.pathname;
+    const meta = {
+        dashboard: {
+            kicker: "PAINEL DE CONTROLE",
+            title: "DASHBOARD",
+            subtitle: "Resumo rápido do estoque.",
+            heroClass: "dashboard-hero",
+        },
+        produtos: {
+            kicker: "CATÁLOGO OPERACIONAL STI",
+            title: "PRODUTOS",
+            subtitle: "Encontre, confira e movimente itens do estoque com leitura rápida.",
+            actions: [{ href: "/produtos/novo", label: "＋ Novo produto", cls: "hero-action" }],
+        },
+        localizacoes: {
+            kicker: "MAPA OPERACIONAL STI",
+            title: "LOCALIZAÇÕES",
+            subtitle: "Visualize a estrutura física do estoque e gerencie armários, prateleiras e áreas.",
+            actions: [{ id: "newLocationButton", label: "＋ Nova localização", cls: "hero-action", type: "button" }],
+        },
+        etiquetas: {
+            kicker: "IDENTIFICAÇÃO STI",
+            title: "ETIQUETAS",
+            subtitle: "Gere etiquetas e códigos para produtos e localizações.",
+        },
+        movimentacoes: {
+            kicker: "LOG OPERACIONAL STI",
+            title: "MOVIMENTAÇÕES",
+            subtitle: "Histórico recente do estoque.",
+            heroClass: "movements-hero",
+        },
+        emprestimos: {
+            kicker: "CONTROLE DE RETORNO",
+            title: "EMPRÉSTIMOS",
+            subtitle: "Itens emprestados e devoluções.",
+        },
+        scanner: {
+            kicker: "LEITURA RÁPIDA",
+            title: "SCANNER",
+            subtitle: "Busca por código interno, barras ou localização.",
+        },
+        importacao: {
+            kicker: "CARGA DE DADOS",
+            title: "IMPORTAÇÃO",
+            subtitle: "Carga simples de produtos por Excel.",
+        },
+        usuarios: {
+            kicker: "ACESSO DO SISTEMA",
+            title: "USUÁRIOS",
+            subtitle: "Controle simples de acesso ao sistema.",
+            actions: [{ id: "newUserButton", label: "＋ Novo usuário", cls: "hero-action", type: "button" }],
+        },
+    };
+
+    if (path === "/produtos/novo") {
+        return {
+            kicker: "CADASTRO OPERACIONAL",
+            title: "NOVO PRODUTO",
+            subtitle: "Cadastre o item e escolha onde ele ficará.",
+            actions: [{ href: "/produtos", label: "← Voltar", cls: "hero-ghost-action" }],
+        };
+    }
+    if (path.startsWith("/produtos/") && path !== "/produtos/novo") {
+        return {
+            kicker: "FICHA OPERACIONAL",
+            title: "PRODUTO",
+            subtitle: "Detalhes, estoque, localização e movimentações.",
+            titleId: "productTitle",
+            subtitleId: "productMeta",
+            actions: [{ href: "/produtos", label: "← Voltar", cls: "hero-ghost-action" }],
+        };
+    }
+    return meta[active] || {
+        kicker: "ESTOQUE TI",
+        title: String(active || "PAINEL").toUpperCase(),
+        subtitle: "",
+    };
+}
+
+function renderHeroActions(actions = []) {
+    return actions.map((action) => {
+        const cls = action.cls || "hero-action";
+        if (action.href) {
+            return `<a class="btn ${cls}" href="${action.href}">${action.label}</a>`;
+        }
+        return `<button class="btn ${cls}" type="${action.type || "button"}" ${action.id ? `id="${action.id}"` : ""}>${action.label}</button>`;
+    }).join("");
+}
+
+function mountPageHeader(active) {
+    const content = document.querySelector("main .pixel-content, main .content-wrap");
+    if (!content) return;
+    const first = content.firstElementChild;
+    if (first && first.classList.contains("pixel-hero")) {
+        first.remove();
+    }
+
+    const meta = currentPageMeta(active);
+    const hero = document.createElement("section");
+    hero.className = `pixel-hero app-page-hero ${meta.heroClass || ""} mb-3`;
+    hero.innerHTML = `
+        <div class="hero-circuit hero-circuit-left"></div>
+        <div class="hero-circuit hero-circuit-right"></div>
+        <div class="hero-pixels"></div>
+        <div class="hero-copy">
+            <div class="pixel-kicker">${escapeHtml(meta.kicker)}</div>
+            <h1 class="display-title" ${meta.titleId ? `id="${meta.titleId}"` : ""}>${escapeHtml(meta.title)}</h1>
+            ${meta.subtitle ? `<p class="products-subtitle" ${meta.subtitleId ? `id="${meta.subtitleId}"` : ""}>${escapeHtml(meta.subtitle)}</p>` : ""}
+        </div>
+        <div class="hero-actions">${renderHeroActions(meta.actions)}</div>
+    `;
+    content.insertBefore(hero, content.firstChild);
+}
+
 async function requireAuth() {
+    const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
+    if (cached) {
+        try {
+            currentUser = JSON.parse(cached);
+            renderUserShell(currentUser);
+            Api.get("/api/auth/me")
+                .then(({ data }) => {
+                    currentUser = data.user;
+                    sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data.user));
+                    renderUserShell(data.user);
+                })
+                .catch(() => {
+                    sessionStorage.removeItem(AUTH_CACHE_KEY);
+                    if (window.location.pathname !== "/login") window.location.href = "/login";
+                });
+            return currentUser;
+        } catch (_error) {
+            sessionStorage.removeItem(AUTH_CACHE_KEY);
+        }
+    }
     try {
         const { data } = await Api.get("/api/auth/me");
         currentUser = data.user;
-        const userLabel = byId("userLabel");
-        if (userLabel) userLabel.textContent = data.user.nome || data.user.username;
+        sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data.user));
+        renderUserShell(data.user);
         return data.user;
     } catch (error) {
         if (window.location.pathname !== "/login") window.location.href = "/login";
@@ -138,24 +291,66 @@ async function requireAuth() {
 function mountNav(active) {
     const nav = byId("appNav");
     if (!nav) return;
+    document.body.classList.add("ops-app-page", "pixel-ops-page");
+    const sidebar = nav.closest(".sidebar");
+    if (sidebar) {
+        sidebar.classList.add("app-sidebar", "pixel-sidebar");
+        nav.classList.add("pixel-nav");
+        Array.from(sidebar.children).forEach((child) => {
+            if (child !== nav) child.remove();
+        });
+        const brand = document.createElement("div");
+        brand.className = "app-sidebar-brand";
+        brand.innerHTML = `
+            <div class="app-sidebar-logo">
+                <img class="pixel-asset-img" src="/assets/img/pixel-ops/ui/logo-monitor.png" alt="" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                <span></span>
+            </div>
+            <div class="app-sidebar-title">ESTOQUE TI</div>
+        `;
+        sidebar.insertBefore(brand, nav);
+        const userPanel = document.createElement("div");
+        userPanel.className = "sidebar-user-panel";
+        userPanel.innerHTML = `
+            <div class="sidebar-user-card">
+                <div class="sidebar-user-avatar">
+                    <img class="pixel-asset-img" src="/assets/img/pixel-ops/ui/admin-avatar.png" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                    <span>▣</span>
+                </div>
+                <div class="sidebar-user-copy">
+                    <div class="sidebar-user-name" data-user-name>Operador</div>
+                    <div class="sidebar-user-role" data-user-role>ADMIN</div>
+                </div>
+            </div>
+            <button class="btn sidebar-logout-button" type="button" data-logout>⇥ Sair</button>
+        `;
+        sidebar.appendChild(userPanel);
+    }
+    mountPageHeader(active);
     const items = [
-        ["dashboard", "/dashboard", "Dashboard"],
-        ["produtos", "/produtos", "Produtos"],
-        ["localizacoes", "/localizacoes", "Localizações"],
-        ["etiquetas", "/etiquetas", "Etiquetas"],
-        ["movimentacoes", "/movimentacoes", "Movimentações"],
-        ["emprestimos", "/emprestimos", "Empréstimos"],
-        ["scanner", "/scanner", "Scanner"],
-        ["importacao", "/importacao", "Importação"],
-        ["usuarios", "/usuarios", "Usuários"],
+        ["dashboard", "/dashboard", "Dashboard", "⌂"],
+        ["produtos", "/produtos", "Produtos", "◇"],
+        ["localizacoes", "/localizacoes", "Localizações", "⌖"],
+        ["etiquetas", "/etiquetas", "Etiquetas", "⌑"],
+        ["movimentacoes", "/movimentacoes", "Movimentações", "↔"],
+        ["emprestimos", "/emprestimos", "Empréstimos", "♡"],
+        ["scanner", "/scanner", "Scanner", "⌗"],
+        ["importacao", "/importacao", "Importação", "⇪"],
+        ["usuarios", "/usuarios", "Usuários", "♙"],
     ];
-    nav.innerHTML = items.map(([key, href, label]) =>
-        `<a class="nav-link ${key === active ? "active" : ""}" href="${href}">${label}</a>`
+    nav.innerHTML = items.map(([key, href, label, icon]) =>
+        `<a class="nav-link ${key === active ? "active" : ""}" href="${href}">
+            <span class="nav-pixel-icon">
+                <img class="pixel-asset-img" src="/assets/img/pixel-ops/nav/${key}.png" alt="" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">
+                <span>${icon}</span>
+            </span>${label}
+        </a>`
     ).join("");
 }
 
 async function logout() {
     await Api.post("/api/auth/logout", {});
+    sessionStorage.removeItem(AUTH_CACHE_KEY);
     window.location.href = "/login";
 }
 

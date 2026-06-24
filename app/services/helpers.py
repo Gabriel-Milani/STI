@@ -1,5 +1,3 @@
-import re
-import unicodedata
 from flask import jsonify
 from ..database import get_db
 
@@ -20,22 +18,36 @@ def api_error(message, status=400, details=None):
     return jsonify(payload), status
 
 
-def slugify(text):
-    text = text or "PRODUTO"
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
-    text = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").upper()
-    return text[:35] or "PRODUTO"
+def format_product_code(number):
+    return f"P{number:05d}"
 
 
-def generate_product_code(nome):
-    base = slugify(nome)
-    with get_db() as db:
-        seq = db.execute("SELECT COUNT(*) AS c FROM produtos").fetchone()["c"] + 1
-        candidate = f"PROD-{seq:05d}-{base[:16]}"
-        while db.execute("SELECT id FROM produtos WHERE codigo = ?", (candidate,)).fetchone():
-            seq += 1
-            candidate = f"PROD-{seq:05d}-{base[:16]}"
-        return candidate
+def product_code_number(code):
+    value = (code or "").strip().upper()
+    return int(value[1:]) if len(value) == 6 and value[0] == "P" and value[1:].isdigit() else None
+
+
+def generate_product_code(nome=None, db=None):
+    close_after = db is None
+    db = db or get_db()
+    try:
+        last_number = 0
+        rows = db.execute("SELECT codigo FROM produtos WHERE codigo LIKE 'P_____'").fetchall()
+        for row in rows:
+            number = product_code_number(row["codigo"])
+            if number:
+                last_number = max(last_number, number)
+
+        next_number = last_number + 1
+        while True:
+            candidate = format_product_code(next_number)
+            exists = db.execute("SELECT id FROM produtos WHERE codigo = ?", (candidate,)).fetchone()
+            if not exists:
+                return candidate
+            next_number += 1
+    finally:
+        if close_after:
+            db.close()
 
 
 def generate_barcode(db):
@@ -54,11 +66,6 @@ def generate_barcode(db):
         db.execute("UPDATE codigo_barras_sequence SET last_value = ? WHERE id = 1", (last_value,))
         if not db.execute("SELECT id FROM produtos WHERE codigo_barras = ?", (codigo,)).fetchone():
             return codigo
-
-
-def require_fields(payload, fields):
-    missing = [f for f in fields if payload.get(f) in (None, "")]
-    return missing
 
 
 def parse_int(value, default=0):

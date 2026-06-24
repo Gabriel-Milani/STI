@@ -41,5 +41,11 @@ def me():
     if not session.get("user_id"):
         return api_error("Não autenticado.", 401)
     with get_db() as db:
-        user = db.execute("SELECT id, username, nome, perfil FROM usuarios WHERE id = ?", (session["user_id"],)).fetchone()
+        user = db.execute("SELECT id, username, nome, perfil, ativo FROM usuarios WHERE id = ?", (session["user_id"],)).fetchone()
+        if not user:
+            session.clear()
+            return api_error("Não autenticado.", 401)
+        if not user["ativo"]:
+            session.clear()
+            return api_error("Usuário inativo. Procure o responsável pelo sistema.", 403)
         return api_ok({"user": row_to_dict(user)})

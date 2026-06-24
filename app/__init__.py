@@ -43,57 +43,33 @@ def create_app():
     def home():
         return redirect("/dashboard")
 
-    @app.get("/login")
-    def login_page():
-        return send_from_directory("frontend", "login.html")
-
-    @app.get("/dashboard")
-    def dashboard_page():
-        return send_from_directory("frontend", "dashboard.html")
-
-    @app.get("/produtos")
-    def produtos_page():
-        return send_from_directory("frontend", "produtos.html")
-
-    @app.get("/produtos/novo")
-    def produto_novo_page():
-        return send_from_directory("frontend", "produtos-novo.html")
+    pages = {
+        "/login": "login.html",
+        "/dashboard": "dashboard.html",
+        "/produtos": "produtos.html",
+        "/produtos/novo": "produtos-novo.html",
+        "/localizacoes": "localizacoes.html",
+        "/etiquetas": "etiquetas.html",
+        "/movimentacoes": "movimentacoes.html",
+        "/emprestimos": "emprestimos.html",
+        "/scanner": "scanner.html",
+        "/importacao": "importacao.html",
+        "/usuarios": "usuarios.html",
+    }
+    for route, filename in pages.items():
+        app.add_url_rule(
+            route,
+            endpoint=f"page_{filename.replace('-', '_').replace('.', '_')}",
+            view_func=lambda filename=filename: send_from_directory("frontend", filename),
+        )
 
     @app.get("/produtos/<codigo>")
     def produto_detalhe_page(codigo):
         return send_from_directory("frontend", "produto-detalhe.html")
 
-    @app.get("/localizacoes")
-    def localizacoes_page():
-        return send_from_directory("frontend", "localizacoes.html")
-
-    @app.get("/etiquetas")
-    def etiquetas_page():
-        return send_from_directory("frontend", "etiquetas.html")
-
-    @app.get("/movimentacoes")
-    def movimentacoes_page():
-        return send_from_directory("frontend", "movimentacoes.html")
-
-    @app.get("/emprestimos")
-    def emprestimos_page():
-        return send_from_directory("frontend", "emprestimos.html")
-
-    @app.get("/scanner")
-    def scanner_page():
-        return send_from_directory("frontend", "scanner.html")
-
-    @app.get("/importacao")
-    def importacao_page():
-        return send_from_directory("frontend", "importacao.html")
-
-    @app.get("/usuarios")
-    def usuarios_page():
-        return send_from_directory("frontend", "usuarios.html")
-
     @app.get("/assets/<path:filename>")
     def frontend_assets(filename):
-        return send_from_directory("frontend/assets", filename)
+        return send_from_directory("frontend/assets", filename, max_age=31536000)
 
     @app.errorhandler(404)
     def not_found(_):

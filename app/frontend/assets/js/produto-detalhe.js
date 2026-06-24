@@ -2,48 +2,148 @@ mountNav("produtos");
 
 let product = null;
 let locations = [];
+let productUnits = [];
 let selectedMoveShelf = "";
 let editModal = null;
+
+const detailProductIconMap = [
+    ["limpa contato", "contact-cleaner"],
+    ["pasta térmica", "thermal-paste"],
+    ["pasta termica", "thermal-paste"],
+    ["carregador", "charger"],
+    ["toner", "toner"],
+    ["unidade de imagem", "imaging-unit"],
+    ["pm9500", "scanner-battery"],
+    ["bateria", "battery"],
+    ["placa", "pci-card"],
+    ["pci", "pci-card"],
+    ["conversor", "converter"],
+    ["extensor", "extender"],
+    ["lightining", "lightning-cable"],
+    ["lightning", "lightning-cable"],
+    ["base notebook", "notebook-base"],
+    ["mouse", "mouse"],
+    ["teclado", "keyboard"],
+    ["cabo", "cable"],
+    ["hdmi", "cable"],
+    ["display", "cable"],
+    ["hd notebook", "hdd"],
+    ["hdd", "hdd"],
+    ["ssd", "ssd"],
+    ["headset mono", "mono-headset"],
+    ["headset", "headset"],
+    ["fone", "headset"],
+    ["rj45", "adapter"],
+    ["adaptador", "adapter"],
+];
 
 function loggedUserLabel() {
     return (currentUser && (currentUser.nome || currentUser.username)) || "usuário logado";
 }
 
+function productAsset(produto) {
+    const source = `${produto.categoria || ""} ${produto.nome || ""} ${produto.modelo || ""}`.toLowerCase();
+    const found = detailProductIconMap.find(([key]) => source.includes(key));
+    return `/assets/img/pixel-ops/products/${found ? found[1] : "box"}.png`;
+}
+
 function movementFields() {
-    const user = escapeHtml(loggedUserLabel());
+    const userName = loggedUserLabel();
+    const user = escapeHtml(userName);
+    const operatorSize = Math.min(Math.max(userName.length, 10), 30);
+    const operatorStyle = `style="--operator-ch: ${operatorSize};"`;
+    const isUnit = product && product.tipo_controle === "unidade";
+    const qtyField = isUnit
+        ? `<input type="hidden" name="quantidade" id="unitMovementQuantity" value="0">`
+        : `<div class="detail-field detail-field-small"><label>Quantidade</label><input class="form-control" type="number" min="1" name="quantidade" placeholder="Qtd." required></div>`;
+    const entryQtyField = `<div class="detail-field detail-field-small"><label>Quantidade</label><input class="form-control" type="number" min="1" name="quantidade" placeholder="Qtd." required></div>`;
+    const unitPicker = (tipo) => isUnit ? renderUnitPicker(tipo) : "";
     return {
         entrada: `
-        <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-5"><input class="form-control" value="Recebido por: ${user}" disabled></div>
-        <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${entryQtyField}
+        <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
+        <div class="detail-field detail-field-observation detail-field-inline-observation"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
         retirada: `
-        <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" value="Entregue por: ${user}" disabled></div>
-        <div class="col-md-5"><input class="form-control" name="entregue_para" placeholder="Entregue para" required></div>
-        <div class="col-md-6"><input class="form-control" name="destino" placeholder="Destino"></div>
-        <div class="col-md-6"><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${qtyField}
+        <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
+        <div class="detail-field detail-field-person detail-field-person-wide"><label>Entregue para</label><input class="form-control" name="entregue_para" placeholder="Nome ou setor" required></div>
+        <div class="detail-field detail-field-destination"><label>Destino</label><input class="form-control" name="destino" placeholder="Destino"></div>
+        <div class="detail-field detail-field-observation detail-field-after-destination"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${unitPicker("retirada")}
     `,
         emprestimo: `
-        <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" value="Entregue por: ${user}" disabled></div>
-        <div class="col-md-5"><input class="form-control" name="emprestado_para" placeholder="Emprestado para" required></div>
-        <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${qtyField}
+        <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
+        <div class="detail-field detail-field-person"><label>Emprestado para</label><input class="form-control" name="emprestado_para" placeholder="Nome ou setor" required></div>
+        <div class="detail-field detail-field-observation detail-field-trailing-observation"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${unitPicker("emprestimo")}
     `,
         descarte: `
-        <div class="col-md-3"><input class="form-control" type="number" min="1" name="quantidade" placeholder="Quantidade" required></div>
-        <div class="col-md-4"><input class="form-control" value="Descartado por: ${user}" disabled></div>
-        <div class="col-md-5"><input class="form-control" name="motivo" placeholder="Motivo" required></div>
-        <div class="col-12"><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${qtyField}
+        <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
+        <div class="detail-field detail-field-reason"><label>Motivo</label><input class="form-control" name="motivo" placeholder="Motivo" required></div>
+        <div class="detail-field detail-field-observation detail-field-trailing-observation"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
+        ${unitPicker("descarte")}
     `,
     };
 }
 
+function renderUnitPicker(tipo) {
+    const available = productUnits.filter((unit) => unit.status === "disponivel");
+    const label = {
+        retirada: "Selecione as unidades que serão retiradas",
+        emprestimo: "Selecione as unidades que serão emprestadas",
+        descarte: "Selecione as unidades que serão descartadas",
+    }[tipo] || "Selecione as unidades";
+    return `
+        <div class="detail-field detail-unit-picker">
+            <label>${label}</label>
+            <div class="unit-picker-count"><strong id="selectedUnitCount">0</strong> selecionada(s)</div>
+            <div class="unit-picker-grid">
+                ${available.map((unit) => `
+                    <label class="unit-picker-option">
+                        <input type="checkbox" name="unidades_codigos" value="${escapeHtml(unit.codigo_unidade)}">
+                        <span>${escapeHtml(unit.codigo_unidade)}</span>
+                    </label>
+                `).join("") || `<div class="detail-empty p-0">Nenhuma unidade disponível.</div>`}
+            </div>
+        </div>
+    `;
+}
+
+function updateSelectedUnitCount() {
+    const checked = Array.from(document.querySelectorAll("#movementFields input[name='unidades_codigos']:checked"));
+    const quantity = byId("unitMovementQuantity");
+    const count = byId("selectedUnitCount");
+    if (quantity) quantity.value = String(checked.length);
+    if (count) count.textContent = String(checked.length);
+}
+
+function selectedUnitFromQuery() {
+    return new URLSearchParams(window.location.search).get("unidade") || "";
+}
+
+function applyUnitFromQueryToMovement() {
+    const code = selectedUnitFromQuery();
+    if (!code || !product || product.tipo_controle !== "unidade") return;
+    if (byId("movementType").value === "entrada") return;
+    const input = Array.from(document.querySelectorAll("#movementFields input[name='unidades_codigos']"))
+        .find((item) => item.value === code);
+    if (input) input.checked = true;
+    updateSelectedUnitCount();
+}
+
 function renderMovementFields() {
+    if (!["entrada", "retirada", "emprestimo", "descarte"].includes(byId("movementType").value)) {
+        byId("movementType").value = "retirada";
+    }
     byId("movementFields").innerHTML = movementFields()[byId("movementType").value] || "";
     byId("movementTypeButtons").querySelectorAll("[data-movement-type]").forEach((button) => {
         button.classList.toggle("active", button.dataset.movementType === byId("movementType").value);
     });
+    updateSelectedUnitCount();
+    applyUnitFromQueryToMovement();
 }
 
 function applyActionFromQuery() {
@@ -59,6 +159,27 @@ function clearAlert() {
     if (target) target.innerHTML = "";
 }
 
+function statusClass(status) {
+    if (status === "baixo") return "is-low";
+    if (status === "zerado") return "is-zero";
+    return "is-ok";
+}
+
+function controlLabel(value) {
+    return value === "unidade" ? "Unidade rastreavel" : "Quantidade";
+}
+
+function movementLabel(tipo) {
+    return {
+        entrada: "Entrada",
+        retirada: "Retirada",
+        emprestimo: "Emprestimo",
+        devolucao: "Devolucao",
+        descarte: "Descarte",
+        mover: "Movido",
+    }[tipo] || tipo;
+}
+
 async function loadLocations() {
     const { data } = await Api.get("/api/localizacoes");
     locations = sortLocations(data.localizacoes);
@@ -69,28 +190,45 @@ async function loadLocations() {
 async function loadProduct() {
     const { data } = await Api.get(`/api/produtos/${encodeURIComponent(pageCodeFromPath())}`);
     product = data.produto;
+    productUnits = data.unidades || [];
     byId("productTitle").textContent = product.nome;
     byId("productMeta").textContent = `${product.codigo} · ${product.localizacao_label}`;
     byId("currentLocationLabel").textContent = product.localizacao_label;
     byId("currentLocationCode").textContent = `Código: ${product.localizacao.codigo}`;
     byId("productInfo").innerHTML = `
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <div>${statusBadge(product.status)}</div>
-            <img class="qr-img border rounded" src="/api/etiquetas/produto/${product.id}/qr.png" alt="QR Code do produto">
+        <div class="product-summary-top">
+            <div class="product-detail-icon ${statusClass(product.status)}">
+                <img src="${productAsset(product)}" alt="">
+            </div>
+            <div class="product-summary-title">
+                <span class="panel-kicker">Ficha do item</span>
+                <h2>${escapeHtml(product.nome)}</h2>
+                <p>${escapeHtml(product.modelo || "Sem modelo informado")}</p>
+            </div>
+            <img class="detail-qr" src="/api/etiquetas/produto/${product.id}/qr.png" alt="QR Code do produto">
         </div>
-        <dl class="row mb-0">
-            <dt class="col-5">Quantidade</dt><dd class="col-7">${product.quantidade_atual}</dd>
-            <dt class="col-5">Mínimo</dt><dd class="col-7">${product.estoque_minimo}</dd>
-            <dt class="col-5">Categoria</dt><dd class="col-7">${escapeHtml(product.categoria || "-")}</dd>
-            <dt class="col-5">Modelo</dt><dd class="col-7">${escapeHtml(product.modelo || "-")}</dd>
-            <dt class="col-5">Barras</dt><dd class="col-7">${escapeHtml(product.codigo_barras || "-")}</dd>
-            <dt class="col-5">Controle</dt><dd class="col-7">${product.tipo_controle === "unidade" ? "Unidade" : "Quantidade"}</dd>
-            ${product.tipo_controle === "unidade" ? `<dt class="col-5">Prefixo</dt><dd class="col-7">${escapeHtml(product.prefixo_rastreio || "-")}</dd>` : ""}
-        </dl>
+        <div class="product-summary-status">
+            ${statusBadge(product.status)}
+            <span>${escapeHtml(controlLabel(product.tipo_controle))}</span>
+        </div>
+        <div class="detail-metrics">
+            <div><span>Atual</span><strong>${product.quantidade_atual}</strong></div>
+            <div><span>Mínimo</span><strong>${product.estoque_minimo}</strong></div>
+            <div><span>Código</span><strong>${escapeHtml(product.codigo)}</strong></div>
+        </div>
+        <div class="detail-data-grid">
+            <div><span>Categoria</span><strong>${escapeHtml(product.categoria || "-")}</strong></div>
+            <div><span>Cód. barras</span><strong>${escapeHtml(product.codigo_barras || "-")}</strong></div>
+            <div><span>Localização</span><strong>${escapeHtml(product.localizacao_label)}</strong></div>
+            ${product.tipo_controle === "unidade" ? `<div><span>Prefixo</span><strong>${escapeHtml(product.prefixo_rastreio || "-")}</strong></div>` : ""}
+        </div>
         <button class="btn btn-outline-primary w-100 mt-3" type="button" id="editProductButton">Editar produto</button>
     `;
     byId("editProductButton").addEventListener("click", openEditModal);
-    renderUnits(data.unidades || []);
+    renderUnits(productUnits);
+    if (selectedUnitFromQuery()) {
+        setAlert(`Unidade lida: ${selectedUnitFromQuery()}`, "info");
+    }
     byId("historyRows").innerHTML = data.movimentacoes.map((mov) => {
         const detalhes = [
             mov.responsavel_destino ? `Para: ${mov.responsavel_destino}` : "",
@@ -100,16 +238,24 @@ async function loadProduct() {
             mov.observacao || "",
         ].filter(Boolean).join(" · ");
         return `
-            <tr>
-                <td>${formatDate(mov.data_hora)}</td>
-                <td>${escapeHtml(mov.tipo)}</td>
-                <td>${mov.quantidade}</td>
-                <td>${escapeHtml(detalhes || "-")}</td>
-                <td>${escapeHtml(mov.usuario_nome || mov.usuario_username || "-")}</td>
-            </tr>
+            <article class="history-item">
+                <div class="history-icon movement-type-${escapeHtml(mov.tipo)}">${mov.tipo === "entrada" ? "↓" : mov.tipo === "retirada" ? "↑" : mov.tipo === "mover" ? "↔" : "#"}</div>
+                <div class="history-body">
+                    <div class="history-title">
+                        <strong>${escapeHtml(movementLabel(mov.tipo))}</strong>
+                        <span>${formatDate(mov.data_hora)}</span>
+                    </div>
+                    <p>${escapeHtml(detalhes || "Sem detalhes adicionais.")}</p>
+                    <small>${escapeHtml(mov.usuario_nome || mov.usuario_username || "-")}</small>
+                </div>
+                <div class="history-qty">${mov.quantidade}</div>
+            </article>
         `;
-    }).join("") || `<tr><td colspan="5" class="text-secondary">Sem histórico.</td></tr>`;
+    }).join("") || `<div class="detail-empty">Sem histórico.</div>`;
     renderMoveLocationPicker();
+    if (byId("movementFields")) {
+        renderMovementFields();
+    }
 }
 
 function renderUnits(unidades) {
@@ -117,9 +263,14 @@ function renderUnits(unidades) {
     if (!card) return;
     card.classList.toggle("d-none", product.tipo_controle !== "unidade");
     if (product.tipo_controle !== "unidade") return;
+    const selectedUnit = selectedUnitFromQuery();
+    byId("unitCountLabel").textContent = `${unidades.length} unid.`;
     byId("unitRows").innerHTML = unidades.map((unit) => `
-        <tr><td>${escapeHtml(unit.codigo_unidade)}</td><td>${escapeHtml(unit.status)}</td></tr>
-    `).join("") || `<tr><td colspan="2" class="text-secondary">Sem unidades.</td></tr>`;
+        <article class="unit-item unit-status-${escapeHtml(unit.status)} ${unit.codigo_unidade === selectedUnit ? "unit-item-selected" : ""}">
+            <strong>${escapeHtml(unit.codigo_unidade)}</strong>
+            <span>${escapeHtml(unit.status)}</span>
+        </article>
+    `).join("") || `<div class="detail-empty">Sem unidades.</div>`;
 }
 
 function openEditModal() {
@@ -170,11 +321,15 @@ function renderMoveLocationPicker() {
 
 function movementPayload(form) {
     const data = formDataObject(form);
+    const selectedUnits = Array.from(form.querySelectorAll("input[name='unidades_codigos']:checked")).map((input) => input.value);
     const payload = {
         produto_id: product.id,
-        quantidade: data.quantidade,
+        quantidade: product.tipo_controle === "unidade" && data.tipo !== "entrada" ? selectedUnits.length : data.quantidade,
         observacao: data.observacao,
     };
+    if (selectedUnits.length) {
+        payload.unidades_codigos = selectedUnits;
+    }
     if (data.tipo === "retirada") {
         payload.entregue_para = data.entregue_para;
         payload.destino = data.destino;
@@ -190,7 +345,9 @@ function movementPayload(form) {
 
 function validateMovement(tipo, payload) {
     if (!Number(payload.quantidade) || Number(payload.quantidade) <= 0) {
-        return "Informe uma quantidade maior que zero.";
+        return product.tipo_controle === "unidade" && tipo !== "entrada"
+            ? "Selecione pelo menos uma unidade."
+            : "Informe uma quantidade maior que zero.";
     }
     if (tipo === "retirada" && !payload.entregue_para) {
         return "Informe quem recebeu o produto.";
@@ -217,6 +374,12 @@ function validateMovement(tipo, payload) {
         if (!button) return;
         byId("movementType").value = button.dataset.movementType;
         renderMovementFields();
+    });
+
+    byId("movementFields").addEventListener("change", (event) => {
+        if (event.target.matches("input[name='unidades_codigos']")) {
+            updateSelectedUnitCount();
+        }
     });
 
     byId("moveShelfOptions").addEventListener("click", (event) => {
@@ -251,7 +414,6 @@ function validateMovement(tipo, payload) {
         try {
             const { message } = await Api.post(`/api/movimentacoes/${tipo}`, payload);
             form.reset();
-            renderMovementFields();
             await loadProduct();
             setAlert(message || "Movimentação registrada.");
         } catch (error) {

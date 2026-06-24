@@ -3,6 +3,7 @@ from openpyxl import load_workbook
 from ..database import get_db
 from ..services.auth_utils import login_required, current_user_id, current_user_name
 from ..services.helpers import api_ok, api_error, generate_product_code, generate_barcode, parse_int, audit
+from ..services.stock_movements import create_mov
 
 importacao_bp = Blueprint("importacao", __name__)
 
@@ -56,7 +57,7 @@ def importar_produtos():
                 continue
             codigo_barras = str(data.get("codigo_barras") or "").strip() or generate_barcode(db)
             try:
-                codigo = generate_product_code(nome)
+                codigo = generate_product_code(db=db)
                 cur = db.execute(
                     """
                     INSERT INTO produtos
@@ -66,14 +67,15 @@ def importar_produtos():
                     (codigo, nome, data.get("categoria"), data.get("modelo"), codigo_barras, qtd, minimo, loc["id"], data.get("observacao")),
                 )
                 if qtd > 0:
-                    db.execute(
-                        """
-                        INSERT INTO movimentacoes
-                        (produto_id, tipo, quantidade, quantidade_antes, quantidade_depois, responsavel_origem,
-                         observacao, localizacao_destino_id, usuario_id)
-                        VALUES (?, 'entrada', ?, 0, ?, ?, 'Importação inicial', ?, ?)
-                        """,
-                        (cur.lastrowid, qtd, qtd, current_user_name(), loc["id"], current_user_id()),
+                    produto = db.execute("SELECT * FROM produtos WHERE id = ?", (cur.lastrowid,)).fetchone()
+                    create_mov(
+                        db,
+                        produto,
+                        "entrada",
+                        qtd,
+                        0,
+                        qtd,
+                        {"recebido_por": current_user_name(), "observacao": "Importação inicial"},
                     )
                 audit(db, current_user_id(), "importar", "produto", cur.lastrowid, codigo)
                 criados += 1
