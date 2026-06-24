@@ -11,8 +11,7 @@ Backend objetivo para almoxarifado de TI com produtos por quantidade.
 - Empréstimo
 - Devolução
 - Descarte
-- Scanner por código interno, código de barras ou QR de localização
-- QR Code para produto e localização
+- Scanner por código interno ou código de barras do produto
 - Importação Excel simples
 - Dashboard com estoque crítico e últimas movimentações
 

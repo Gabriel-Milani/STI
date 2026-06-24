@@ -41,25 +41,9 @@ async function loadLocations() {
     renderLocations();
 }
 
-function syncTrackingFields() {
-    const unitMode = byId("tipoControle").value === "unidade";
-    byId("prefixoRastreio").disabled = !unitMode;
-    byId("prefixoRastreio").required = unitMode;
-    if (!unitMode) byId("prefixoRastreio").value = "";
-}
-
 (async function init() {
     await requireAuth();
     await loadLocations();
-    syncTrackingFields();
-    byId("tipoControle").addEventListener("change", syncTrackingFields);
-
-    byId("tipoControle").addEventListener("change", () => {
-        const unit = byId("tipoControle").value === "unidade";
-        byId("prefixoRastreio").disabled = !unit;
-        byId("prefixoRastreio").required = unit;
-        if (!unit) byId("prefixoRastreio").value = "";
-    });
 
     byId("shelfOptions").addEventListener("click", (event) => {
         const button = event.target.closest("[data-shelf]");

@@ -17,9 +17,6 @@ def resumo():
         baixo = db.execute("SELECT COUNT(*) AS c FROM produtos WHERE ativo = 1 AND quantidade_atual <= estoque_minimo").fetchone()["c"]
         zerados = db.execute("SELECT COUNT(*) AS c FROM produtos WHERE ativo = 1 AND quantidade_atual = 0").fetchone()["c"]
         emp_abertos = db.execute("SELECT COUNT(*) AS c FROM emprestimos WHERE status = 'aberto'").fetchone()["c"]
-        unidades_rastreaveis = db.execute(
-            "SELECT COUNT(*) AS c FROM produto_unidades WHERE status IN ('disponivel', 'emprestado')"
-        ).fetchone()["c"]
         loc_ativas = db.execute("SELECT COUNT(*) AS c FROM localizacoes WHERE ativo = 1").fetchone()["c"]
         ultimas = db.execute(
             """
@@ -94,7 +91,6 @@ def resumo():
             "resumo": {
                 "total_produtos": total_produtos,
                 "unidades_em_estoque": unidades,
-                "unidades_rastreaveis": unidades_rastreaveis,
                 "localizacoes_ativas": loc_ativas,
                 "produtos_abaixo_minimo": baixo,
                 "produtos_zerados": zerados,

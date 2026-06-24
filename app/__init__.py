@@ -12,7 +12,6 @@ from .routes.movimentacoes import movimentacoes_bp
 from .routes.emprestimos import emprestimos_bp
 from .routes.scanner import scanner_bp
 from .routes.dashboard import dashboard_bp
-from .routes.etiquetas import etiquetas_bp
 from .routes.importacao import importacao_bp
 from .routes.usuarios import usuarios_bp
 
@@ -57,7 +56,6 @@ def create_app():
     app.register_blueprint(emprestimos_bp, url_prefix="/api/emprestimos")
     app.register_blueprint(scanner_bp, url_prefix="/api/scanner")
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
-    app.register_blueprint(etiquetas_bp, url_prefix="/api/etiquetas")
     app.register_blueprint(importacao_bp, url_prefix="/api/importacao")
     app.register_blueprint(usuarios_bp, url_prefix="/api/usuarios")
 
@@ -75,7 +73,6 @@ def create_app():
         "/produtos": "produtos.html",
         "/produtos/novo": "produtos-novo.html",
         "/localizacoes": "localizacoes.html",
-        "/etiquetas": "etiquetas.html",
         "/movimentacoes": "movimentacoes.html",
         "/emprestimos": "emprestimos.html",
         "/scanner": "scanner.html",

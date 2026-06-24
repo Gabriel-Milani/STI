@@ -82,15 +82,13 @@ def test_quantidade():
     assert detalhe["codigo_barras"].startswith("P")
 
 
-def test_unidade():
+def test_sem_controle_por_unidade():
     response = api_post(
         "/api/produtos",
         json={
             "nome": "Mouse-Novo",
             "categoria": "Mouse",
             "modelo": "MN-1",
-            "tipo_controle": "unidade",
-            "prefixo_rastreio": "0300",
             "quantidade_inicial": 2,
             "estoque_minimo": 1,
             "localizacao_codigo": "ARM01-P4-MOUSES",
@@ -98,31 +96,22 @@ def test_unidade():
     )
     produto_id = assert_ok(response, 201)["data"]["id"]
     detalhe = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]
-    assert [u["codigo_unidade"] for u in detalhe["unidades"]] == ["0300-1", "0300-2"]
+    assert "unidades" not in detalhe
+    assert detalhe["produto"]["quantidade_atual"] == 2
 
     assert_ok(api_post("/api/movimentacoes/entrada", json={"produto_id": produto_id, "quantidade": 1}))
     detalhe = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]
-    assert [u["codigo_unidade"] for u in detalhe["unidades"]] == ["0300-1", "0300-2", "0300-3"]
-    assert_error(api_post("/api/movimentacoes/retirada", json={"produto_id": produto_id, "quantidade": 1, "entregue_para": "Maria"}), 400)
-    assert_ok(api_post(
-        "/api/movimentacoes/retirada",
-        json={"produto_id": produto_id, "quantidade": 1, "entregue_para": "Maria", "unidades_codigos": ["0300-2"]},
-    ))
+    assert detalhe["produto"]["quantidade_atual"] == 3
+    assert_ok(api_post("/api/movimentacoes/retirada", json={"produto_id": produto_id, "quantidade": 1, "entregue_para": "Maria"}))
     detalhe = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]
-    status_por_codigo = {u["codigo_unidade"]: u["status"] for u in detalhe["unidades"]}
-    assert status_por_codigo["0300-1"] == "disponivel"
-    assert status_por_codigo["0300-2"] == "retirado"
+    assert detalhe["produto"]["quantidade_atual"] == 2
     antes_mover = detalhe["produto"]["quantidade_atual"]
     assert_ok(api_post(f"/api/produtos/{produto_id}/mover", json={"localizacao_codigo": "ARM01-P4-ADAPTADORES-HDMI-EM-CAIXA"}))
     depois_mover = assert_ok(client.get(f"/api/produtos/{produto_id}"))["data"]["produto"]["quantidade_atual"]
     assert depois_mover == antes_mover
-    scan = assert_ok(client.get("/api/scanner/buscar/0300-2"))["data"]
-    assert scan["tipo"] == "unidade"
-    assert scan["unidade"]["status"] == "retirado"
-
-    with get_db() as db:
-        vinculadas = db.execute("SELECT COUNT(*) AS total FROM movimentacao_unidades").fetchone()["total"]
-        assert vinculadas >= 4
+    scan = assert_ok(client.get(f"/api/scanner/buscar/{detalhe['produto']['codigo_barras']}"))["data"]
+    assert scan["tipo"] == "produto"
+    assert scan["produto"]["id"] == produto_id
 
 
 def test_importacao_produtos():
@@ -220,7 +209,7 @@ def test_backup_database():
 if __name__ == "__main__":
     login()
     test_quantidade()
-    test_unidade()
+    test_sem_controle_por_unidade()
     test_importacao_produtos()
     test_usuarios()
     test_backup_database()

@@ -31,18 +31,32 @@ def generate_product_code(nome=None, db=None):
     close_after = db is None
     db = db or get_db()
     try:
-        last_number = 0
-        rows = db.execute("SELECT codigo FROM produtos WHERE codigo LIKE 'P_____'").fetchall()
-        for row in rows:
-            number = product_code_number(row["codigo"])
-            if number:
-                last_number = max(last_number, number)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS produto_codigo_sequence (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                last_value INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        row = db.execute("SELECT last_value FROM produto_codigo_sequence WHERE id = 1").fetchone()
+        if not row:
+            last_number = 0
+            rows = db.execute("SELECT codigo FROM produtos WHERE codigo LIKE 'P_____'").fetchall()
+            for row in rows:
+                number = product_code_number(row["codigo"])
+                if number:
+                    last_number = max(last_number, number)
+            db.execute("INSERT INTO produto_codigo_sequence (id, last_value) VALUES (1, ?)", (last_number,))
+        else:
+            last_number = row["last_value"]
 
         next_number = last_number + 1
         while True:
             candidate = format_product_code(next_number)
+            db.execute("UPDATE produto_codigo_sequence SET last_value = ? WHERE id = 1", (next_number,))
             exists = db.execute("SELECT id FROM produtos WHERE codigo = ?", (candidate,)).fetchone()
             if not exists:
+                if close_after:
+                    db.commit()
                 return candidate
             next_number += 1
     finally:

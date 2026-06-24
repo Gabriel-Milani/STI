@@ -36,9 +36,6 @@ function movementWhen(value) {
 }
 
 function renderMetrics(resumo) {
-    const trackedPercent = resumo.unidades_em_estoque
-        ? Math.min(100, Math.round((resumo.unidades_rastreaveis / resumo.unidades_em_estoque) * 100))
-        : 0;
     const metrics = [
         {
             label: "Total de produtos",
@@ -53,14 +50,6 @@ function renderMetrics(resumo) {
             detail: "Requer atenção •",
             icon: "warn",
             tone: "amber",
-        },
-        {
-            label: "Unidades rastreáveis",
-            value: resumo.unidades_rastreaveis,
-            detail: `${trackedPercent}% do total`,
-            icon: "target",
-            tone: "cyan",
-            progress: trackedPercent,
         },
         {
             label: "Localizações ativas",

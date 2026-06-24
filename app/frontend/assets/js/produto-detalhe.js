@@ -2,7 +2,6 @@ mountNav("produtos");
 
 let product = null;
 let locations = [];
-let productUnits = [];
 let selectedMoveShelf = "";
 let editModal = null;
 
@@ -19,15 +18,10 @@ function movementFields() {
     const user = escapeHtml(userName);
     const operatorSize = Math.min(Math.max(userName.length, 10), 30);
     const operatorStyle = `style="--operator-ch: ${operatorSize};"`;
-    const isUnit = product && product.tipo_controle === "unidade";
-    const qtyField = isUnit
-        ? `<input type="hidden" name="quantidade" id="unitMovementQuantity" value="0">`
-        : `<div class="detail-field detail-field-small"><label>Quantidade</label><input class="form-control" type="number" min="1" name="quantidade" placeholder="Qtd." required></div>`;
-    const entryQtyField = `<div class="detail-field detail-field-small"><label>Quantidade</label><input class="form-control" type="number" min="1" name="quantidade" placeholder="Qtd." required></div>`;
-    const unitPicker = (tipo) => isUnit ? renderUnitPicker(tipo) : "";
+    const qtyField = `<div class="detail-field detail-field-small"><label>Quantidade</label><input class="form-control" type="number" min="1" name="quantidade" placeholder="Qtd." required></div>`;
     return {
         entrada: `
-        ${entryQtyField}
+        ${qtyField}
         <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
         <div class="detail-field detail-field-observation detail-field-inline-observation"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
     `,
@@ -37,68 +31,20 @@ function movementFields() {
         <div class="detail-field detail-field-person detail-field-person-wide"><label>Entregue para</label><input class="form-control" name="entregue_para" placeholder="Nome ou setor" required></div>
         <div class="detail-field detail-field-destination"><label>Destino</label><input class="form-control" name="destino" placeholder="Destino"></div>
         <div class="detail-field detail-field-observation detail-field-after-destination"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
-        ${unitPicker("retirada")}
     `,
         emprestimo: `
         ${qtyField}
         <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
         <div class="detail-field detail-field-person"><label>Emprestado para</label><input class="form-control" name="emprestado_para" placeholder="Nome ou setor" required></div>
         <div class="detail-field detail-field-observation detail-field-trailing-observation"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
-        ${unitPicker("emprestimo")}
     `,
         descarte: `
         ${qtyField}
         <div class="detail-field detail-field-user" ${operatorStyle}><label>Operador</label><input class="form-control" value="${user}" disabled></div>
         <div class="detail-field detail-field-reason"><label>Motivo</label><input class="form-control" name="motivo" placeholder="Motivo" required></div>
         <div class="detail-field detail-field-observation detail-field-trailing-observation"><label>Observação</label><input class="form-control" name="observacao" placeholder="Observação"></div>
-        ${unitPicker("descarte")}
     `,
     };
-}
-
-function renderUnitPicker(tipo) {
-    const available = productUnits.filter((unit) => unit.status === "disponivel");
-    const label = {
-        retirada: "Selecione as unidades que serão retiradas",
-        emprestimo: "Selecione as unidades que serão emprestadas",
-        descarte: "Selecione as unidades que serão descartadas",
-    }[tipo] || "Selecione as unidades";
-    return `
-        <div class="detail-field detail-unit-picker">
-            <label>${label}</label>
-            <div class="unit-picker-count"><strong id="selectedUnitCount">0</strong> selecionada(s)</div>
-            <div class="unit-picker-grid">
-                ${available.map((unit) => `
-                    <label class="unit-picker-option">
-                        <input type="checkbox" name="unidades_codigos" value="${escapeHtml(unit.codigo_unidade)}">
-                        <span>${escapeHtml(unit.codigo_unidade)}</span>
-                    </label>
-                `).join("") || `<div class="detail-empty p-0">Nenhuma unidade disponível.</div>`}
-            </div>
-        </div>
-    `;
-}
-
-function updateSelectedUnitCount() {
-    const checked = Array.from(document.querySelectorAll("#movementFields input[name='unidades_codigos']:checked"));
-    const quantity = byId("unitMovementQuantity");
-    const count = byId("selectedUnitCount");
-    if (quantity) quantity.value = String(checked.length);
-    if (count) count.textContent = String(checked.length);
-}
-
-function selectedUnitFromQuery() {
-    return new URLSearchParams(window.location.search).get("unidade") || "";
-}
-
-function applyUnitFromQueryToMovement() {
-    const code = selectedUnitFromQuery();
-    if (!code || !product || product.tipo_controle !== "unidade") return;
-    if (byId("movementType").value === "entrada") return;
-    const input = Array.from(document.querySelectorAll("#movementFields input[name='unidades_codigos']"))
-        .find((item) => item.value === code);
-    if (input) input.checked = true;
-    updateSelectedUnitCount();
 }
 
 function renderMovementFields() {
@@ -109,8 +55,6 @@ function renderMovementFields() {
     byId("movementTypeButtons").querySelectorAll("[data-movement-type]").forEach((button) => {
         button.classList.toggle("active", button.dataset.movementType === byId("movementType").value);
     });
-    updateSelectedUnitCount();
-    applyUnitFromQueryToMovement();
 }
 
 function applyActionFromQuery() {
@@ -130,10 +74,6 @@ function statusClass(status) {
     if (status === "baixo") return "is-low";
     if (status === "zerado") return "is-zero";
     return "is-ok";
-}
-
-function controlLabel(value) {
-    return value === "unidade" ? "Unidade rastreavel" : "Quantidade";
 }
 
 function movementLabel(tipo) {
@@ -157,7 +97,6 @@ async function loadLocations() {
 async function loadProduct() {
     const { data } = await Api.get(`/api/produtos/${encodeURIComponent(pageCodeFromPath())}`);
     product = data.produto;
-    productUnits = data.unidades || [];
     byId("productTitle").textContent = product.nome;
     byId("productMeta").textContent = `${product.codigo} · ${product.localizacao_label}`;
     byId("currentLocationLabel").textContent = product.localizacao_label;
@@ -172,11 +111,10 @@ async function loadProduct() {
                 <h2>${escapeHtml(product.nome)}</h2>
                 <p>${escapeHtml(product.modelo || "Sem modelo informado")}</p>
             </div>
-            <img class="detail-qr" src="/api/etiquetas/produto/${product.id}/qr.png" alt="QR Code do produto">
         </div>
         <div class="product-summary-status">
             ${statusBadge(product.status)}
-            <span>${escapeHtml(controlLabel(product.tipo_controle))}</span>
+            <span>Quantidade</span>
         </div>
         <div class="detail-metrics">
             <div><span>Atual</span><strong>${product.quantidade_atual}</strong></div>
@@ -187,21 +125,15 @@ async function loadProduct() {
             <div><span>Categoria</span><strong>${escapeHtml(product.categoria || "-")}</strong></div>
             <div><span>Cód. barras</span><strong>${escapeHtml(product.codigo_barras || "-")}</strong></div>
             <div><span>Localização</span><strong>${escapeHtml(product.localizacao_label)}</strong></div>
-            ${product.tipo_controle === "unidade" ? `<div><span>Prefixo</span><strong>${escapeHtml(product.prefixo_rastreio || "-")}</strong></div>` : ""}
         </div>
         <button class="btn btn-outline-primary w-100 mt-3" type="button" id="editProductButton">Editar produto</button>
     `;
     byId("editProductButton").addEventListener("click", openEditModal);
-    renderUnits(productUnits);
-    if (selectedUnitFromQuery()) {
-        setAlert(`Unidade lida: ${selectedUnitFromQuery()}`, "info");
-    }
     byId("historyRows").innerHTML = data.movimentacoes.map((mov) => {
         const detalhes = [
             mov.responsavel_destino ? `Para: ${mov.responsavel_destino}` : "",
             mov.destino ? `Destino: ${mov.destino}` : "",
             mov.motivo ? `Motivo: ${mov.motivo}` : "",
-            mov.unidades_codigos ? `Unidades: ${mov.unidades_codigos}` : "",
             mov.observacao || "",
         ].filter(Boolean).join(" · ");
         return `
@@ -223,21 +155,6 @@ async function loadProduct() {
     if (byId("movementFields")) {
         renderMovementFields();
     }
-}
-
-function renderUnits(unidades) {
-    const card = byId("unitCard");
-    if (!card) return;
-    card.classList.toggle("d-none", product.tipo_controle !== "unidade");
-    if (product.tipo_controle !== "unidade") return;
-    const selectedUnit = selectedUnitFromQuery();
-    byId("unitCountLabel").textContent = `${unidades.length} unid.`;
-    byId("unitRows").innerHTML = unidades.map((unit) => `
-        <article class="unit-item unit-status-${escapeHtml(unit.status)} ${unit.codigo_unidade === selectedUnit ? "unit-item-selected" : ""}">
-            <strong>${escapeHtml(unit.codigo_unidade)}</strong>
-            <span>${escapeHtml(unit.status)}</span>
-        </article>
-    `).join("") || `<div class="detail-empty">Sem unidades.</div>`;
 }
 
 function openEditModal() {
@@ -288,15 +205,11 @@ function renderMoveLocationPicker() {
 
 function movementPayload(form) {
     const data = formDataObject(form);
-    const selectedUnits = Array.from(form.querySelectorAll("input[name='unidades_codigos']:checked")).map((input) => input.value);
     const payload = {
         produto_id: product.id,
-        quantidade: product.tipo_controle === "unidade" && data.tipo !== "entrada" ? selectedUnits.length : data.quantidade,
+        quantidade: data.quantidade,
         observacao: data.observacao,
     };
-    if (selectedUnits.length) {
-        payload.unidades_codigos = selectedUnits;
-    }
     if (data.tipo === "retirada") {
         payload.entregue_para = data.entregue_para;
         payload.destino = data.destino;
@@ -312,9 +225,7 @@ function movementPayload(form) {
 
 function validateMovement(tipo, payload) {
     if (!Number(payload.quantidade) || Number(payload.quantidade) <= 0) {
-        return product.tipo_controle === "unidade" && tipo !== "entrada"
-            ? "Selecione pelo menos uma unidade."
-            : "Informe uma quantidade maior que zero.";
+        return "Informe uma quantidade maior que zero.";
     }
     if (tipo === "retirada" && !payload.entregue_para) {
         return "Informe quem recebeu o produto.";
@@ -341,12 +252,6 @@ function validateMovement(tipo, payload) {
         if (!button) return;
         byId("movementType").value = button.dataset.movementType;
         renderMovementFields();
-    });
-
-    byId("movementFields").addEventListener("change", (event) => {
-        if (event.target.matches("input[name='unidades_codigos']")) {
-            updateSelectedUnitCount();
-        }
     });
 
     byId("moveShelfOptions").addEventListener("click", (event) => {

@@ -85,7 +85,6 @@ function renderShelfDetail(data) {
             </div>
             <button type="button" data-edit-location-id="${loc.id}">Editar</button>
             <button type="button" data-move-location-id="${loc.id}">Mover</button>
-            <img src="/api/etiquetas/localizacao/${encodeURIComponent(loc.codigo)}/qr.png" alt="QR Code">
         </article>
     `).join("") || `<div class="locations-empty">Nenhuma localização cadastrada nessa prateleira.</div>`;
     byId("shelfLocationList").innerHTML += `

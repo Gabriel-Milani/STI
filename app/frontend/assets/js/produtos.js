@@ -8,11 +8,6 @@ function pixelImg(src, alt = "") {
     return `<img class="pixel-asset-img" src="${src}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">`;
 }
 
-function controlBadge(produto) {
-    const unit = (produto.tipo_controle || "quantidade") === "unidade";
-    return `<span class="catalog-badge ${unit ? "badge-unit" : "badge-qty"}">${unit ? "Unidade" : "Quantidade"}</span>`;
-}
-
 function categoryBadge(produto) {
     return `<span class="catalog-badge badge-category">${escapeHtml(produto.categoria || "Sem categoria")}</span>`;
 }
@@ -29,8 +24,6 @@ function productMatchesFilter(produto) {
     if (activeFilter === "todos") return true;
     if (activeFilter === "baixo") return produto.status === "baixo";
     if (activeFilter === "zerado") return produto.status === "zerado";
-    if (activeFilter === "quantidade") return (produto.tipo_controle || "quantidade") === "quantidade";
-    if (activeFilter === "unidade") return produto.tipo_controle === "unidade";
     return true;
 }
 
@@ -55,7 +48,6 @@ function renderMetrics() {
     const metrics = [
         { label: "Total de produtos", value: products.length, icon: "box" },
         { label: "Estoque baixo", value: products.filter((p) => p.status === "baixo").length, icon: "warn" },
-        { label: "Unidades rastreáveis", value: products.filter((p) => p.tipo_controle === "unidade").length, icon: "target" },
         { label: "Localizações ativas", value: activeLocationsCount, icon: "pin" },
     ];
     byId("catalogMetrics").innerHTML = metrics.map((metric) => `
@@ -85,7 +77,7 @@ function renderCard(produto) {
                     ${pixelImg(`/assets/img/pixel-ops/products/${icon}.webp`)}
                     <span></span>
                 </div>
-                <div class="product-badges">${categoryBadge(produto)}${controlBadge(produto)}</div>
+                <div class="product-badges">${categoryBadge(produto)}</div>
             </div>
 
             <div class="product-card-body">

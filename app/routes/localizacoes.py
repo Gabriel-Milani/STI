@@ -1,7 +1,7 @@
 import re
 import unicodedata
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from ..database import get_db, rows_to_list, row_to_dict
 from ..services.auth_utils import login_required, current_user_id
 from ..services.helpers import api_ok, api_error, audit
@@ -188,6 +188,7 @@ def criar_prateleira():
             db.commit()
             return api_ok({"id": cur.lastrowid}, "Prateleira criada.", 201)
         except Exception:
+            current_app.logger.exception("Erro ao criar prateleira")
             db.rollback()
             return api_error("Não foi possível criar a prateleira. Verifique se ela já existe.", 400)
 
@@ -321,6 +322,8 @@ def criar():
             db.commit()
             return api_ok({"id": cur.lastrowid, "codigo": codigo}, "Localização criada.", 201)
         except Exception:
+            current_app.logger.exception("Erro ao criar localização")
+            db.rollback()
             return api_error("Não foi possível criar a localização. Verifique se o código já existe.", 400)
 
 

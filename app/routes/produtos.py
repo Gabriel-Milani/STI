@@ -1,16 +1,16 @@
-from flask import Blueprint, request
+from sqlite3 import IntegrityError
+
+from flask import Blueprint, current_app, request
 from ..database import get_db, rows_to_list, row_to_dict
 from ..services.auth_utils import login_required, current_user_id
 from ..services.helpers import api_ok, api_error, generate_barcode, parse_int, audit, location_label
 from ..services.products import ProductCreateError, ProductValidationError, create_product
-from ..services.unidades import is_unit_product
 
 produtos_bp = Blueprint("produtos", __name__)
 
 
 def produto_payload(row, loc=None):
     data = row_to_dict(row)
-    data["tipo_controle"] = data.get("tipo_controle") or "quantidade"
     if loc:
         data["localizacao"] = row_to_dict(loc)
         data["localizacao_label"] = location_label(loc)
@@ -45,7 +45,7 @@ def listar():
     sql = f"""
         SELECT
             p.id, p.codigo, p.nome, p.categoria, p.modelo, p.codigo_barras,
-            p.quantidade_atual, p.estoque_minimo, p.tipo_controle,
+            p.quantidade_atual, p.estoque_minimo,
             l.codigo AS localizacao_codigo, l.nome AS localizacao_nome, l.armario, l.prateleira
         FROM produtos p
         JOIN localizacoes l ON l.id = p.localizacao_id
@@ -56,7 +56,6 @@ def listar():
         rows = rows_to_list(db.execute(sql, params).fetchall())
         for r in rows:
             r["localizacao_label"] = f"{r['armario']} > {r['prateleira']} > {r['localizacao_nome']}"
-            r["tipo_controle"] = r.get("tipo_controle") or "quantidade"
             if r["quantidade_atual"] == 0:
                 r["status"] = "zerado"
             elif r["quantidade_atual"] <= r["estoque_minimo"]:
@@ -109,15 +108,10 @@ def detalhe(codigo_ou_id):
             "SELECT * FROM emprestimos WHERE produto_id = ? AND status = 'aberto' ORDER BY data_emprestimo DESC",
             (produto["id"],),
         ).fetchall()
-        unidades = db.execute(
-            "SELECT * FROM produto_unidades WHERE produto_id = ? ORDER BY id",
-            (produto["id"],),
-        ).fetchall()
         return api_ok({
             "produto": produto_payload(produto, loc),
             "movimentacoes": rows_to_list(movs),
             "emprestimos_abertos": rows_to_list(emp),
-            "unidades": rows_to_list(unidades),
         })
 
 
@@ -156,9 +150,13 @@ def atualizar(produto_id):
             audit(db, current_user_id(), "editar", "produto", produto_id, produto["codigo"])
             db.commit()
             return api_ok(message="Produto atualizado.")
-        except Exception:
+        except IntegrityError:
             db.rollback()
             return api_error("Não foi possível atualizar. Verifique código de barras duplicado.", 400)
+        except Exception:
+            current_app.logger.exception("Erro ao atualizar produto %s", produto_id)
+            db.rollback()
+            return api_error("Não foi possível atualizar o produto.", 500)
 
 
 @produtos_bp.post("/<int:produto_id>/mover")
@@ -188,11 +186,6 @@ def mover(produto_id):
                 db.rollback()
                 return api_error("O produto já está nessa localização.", 400)
             db.execute("UPDATE produtos SET localizacao_id = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (destino["id"], produto_id))
-            if is_unit_product(produto):
-                db.execute(
-                    "UPDATE produto_unidades SET localizacao_id = ? WHERE produto_id = ? AND status = 'disponivel'",
-                    (destino["id"], produto_id),
-                )
             db.execute(
                 """
                 INSERT INTO movimentacoes
@@ -214,6 +207,7 @@ def mover(produto_id):
             db.commit()
             return api_ok(message="Produto movido.")
         except Exception:
+            current_app.logger.exception("Erro ao mover produto %s", produto_id)
             db.rollback()
             return api_error("Não foi possível mover o produto.", 500)
 

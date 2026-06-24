@@ -217,11 +217,6 @@ function currentPageMeta(active) {
             subtitle: "Visualize a estrutura física do estoque e gerencie armários, prateleiras e áreas.",
             actions: [{ id: "newLocationButton", label: "＋ Nova localização", cls: "hero-action", type: "button" }],
         },
-        etiquetas: {
-            kicker: "IDENTIFICAÇÃO STI",
-            title: "ETIQUETAS",
-            subtitle: "Gere etiquetas e códigos para produtos e localizações.",
-        },
         movimentacoes: {
             kicker: "LOG OPERACIONAL STI",
             title: "MOVIMENTAÇÕES",
@@ -390,7 +385,6 @@ function mountNav(active) {
         ["dashboard", "/dashboard", "Dashboard", "⌂"],
         ["produtos", "/produtos", "Produtos", "◇"],
         ["localizacoes", "/localizacoes", "Localizações", "⌖"],
-        ["etiquetas", "/etiquetas", "Etiquetas", "⌑"],
         ["movimentacoes", "/movimentacoes", "Movimentações", "↔"],
         ["emprestimos", "/emprestimos", "Empréstimos", "♡"],
         ["scanner", "/scanner", "Scanner", "⌗"],
