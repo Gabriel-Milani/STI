@@ -53,21 +53,6 @@ def create_units(db, produto, quantidade, observacao=None):
     return created
 
 
-def take_available_units(db, produto_id, quantidade):
-    rows = db.execute(
-        """
-        SELECT * FROM produto_unidades
-        WHERE produto_id = ? AND status = 'disponivel'
-        ORDER BY id
-        LIMIT ?
-        """,
-        (produto_id, quantidade),
-    ).fetchall()
-    if len(rows) < quantidade:
-        return None
-    return rows
-
-
 def selected_available_units(db, produto_id, codigos):
     clean_codes = []
     for codigo in codigos or []:

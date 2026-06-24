@@ -49,10 +49,6 @@ def api_post(path, json=None, target_client=client):
     return target_client.post(path, json=json or {}, headers=csrf_headers(target_client))
 
 
-def api_put(path, json=None, target_client=client):
-    return target_client.put(path, json=json or {}, headers=csrf_headers(target_client))
-
-
 def api_upload(path, data, target_client=client):
     return target_client.post(path, data=data, content_type="multipart/form-data", headers=csrf_headers(target_client))
 

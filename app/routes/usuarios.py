@@ -1,6 +1,6 @@
 from flask import Blueprint, request
 from werkzeug.security import generate_password_hash
-from ..database import get_db, rows_to_list, row_to_dict
+from ..database import get_db, rows_to_list
 from ..services.auth_utils import admin_required, current_user_id
 from ..services.helpers import api_ok, api_error, audit
 

@@ -1,6 +1,4 @@
 import sqlite3
-import re
-import unicodedata
 import os
 from pathlib import Path
 from datetime import datetime
@@ -149,37 +147,6 @@ def normalize_legacy_product_codes(db):
             "UPDATE produtos SET codigo = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",
             (candidate, row["id"]),
         )
-
-
-def location_slug(value):
-    text = unicodedata.normalize("NFKD", value or "")
-    text = text.encode("ascii", "ignore").decode("ascii")
-    text = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").upper()
-    return text or "AREA"
-
-
-def normalize_location_codes(db):
-    rows = db.execute(
-        """
-        SELECT id, codigo, nome, armario, prateleira
-        FROM localizacoes
-        ORDER BY armario, prateleira, ordem, id
-        """
-    ).fetchall()
-    if not rows:
-        return
-
-    used_codes = {}
-    for row in rows:
-        base_code = f"{row['armario'].strip().upper()}-{row['prateleira'].strip().upper()}-{location_slug(row['nome'])}"
-        candidate = base_code
-        suffix = 2
-        while candidate in used_codes:
-            candidate = f"{base_code}-{suffix:02d}"
-            suffix += 1
-        used_codes[candidate] = row["id"]
-        if candidate != row["codigo"]:
-            db.execute("UPDATE localizacoes SET codigo = ? WHERE id = ?", (candidate, row["id"]))
 
 
 def location_reference_count(db, location_id):
