@@ -18,7 +18,9 @@
                     <div class="card shadow-sm"><div class="card-header bg-white fw-semibold">Dados do produto</div>
                         <div class="card-body vstack gap-3">
                             <input class="form-control" name="nome" placeholder="Nome" required autofocus>
-                            <input class="form-control" name="categoria" placeholder="Categoria">
+                            <select class="form-select product-category-select" name="categoria" id="categorySelect">
+                                <option value="">Carregando categorias...</option>
+                            </select>
                             <input class="form-control" name="modelo" placeholder="Modelo">
                             <input class="form-control" name="codigo_barras" placeholder="Código de barras">
                             <div class="row g-2"><div class="col"><input class="form-control" type="number" min="0" name="quantidade_inicial" placeholder="Qtd. inicial" value="0"></div><div class="col"><input class="form-control" type="number" min="0" name="estoque_minimo" placeholder="Mínimo" value="0"></div></div>

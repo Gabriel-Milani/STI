@@ -77,13 +77,14 @@ function renderCard(produto) {
                     ${pixelImg(`/assets/img/pixel-ops/products/${icon}.webp`)}
                     <span></span>
                 </div>
-                <div class="product-badges">${categoryBadge(produto)}</div>
+                <div class="product-card-heading">
+                    <div class="product-badges">${categoryBadge(produto)}</div>
+                    <h2 class="product-name">${escapeHtml(produto.nome)}</h2>
+                    <div class="product-model">Modelo: ${escapeHtml(produto.modelo || "Não informado")}</div>
+                </div>
             </div>
 
             <div class="product-card-body">
-                <h2 class="product-name">${escapeHtml(produto.nome)}</h2>
-                <div class="product-model">Modelo: ${escapeHtml(produto.modelo || "Não informado")}</div>
-
                 <div class="product-codes">
                     <div class="code-cell">
                         <span>Código int.</span>
@@ -96,12 +97,15 @@ function renderCard(produto) {
                     </div>
                 </div>
 
-                <div class="product-location">Localização: ${escapeHtml(location)}</div>
+                <div class="product-location">
+                    <span>Localização</span>
+                    <strong>${escapeHtml(location)}</strong>
+                </div>
             </div>
 
             <div class="stock-strip">
-                <div class="stock-info"><span class="stock-label">Atual</span><strong>${produto.quantidade_atual}</strong></div>
-                <div class="stock-info"><span class="stock-label">Mínimo</span><strong>${produto.estoque_minimo}</strong></div>
+                <div class="stock-info stock-current"><span class="stock-label">Atual</span><strong>${produto.quantidade_atual}</strong></div>
+                <div class="stock-info stock-minimum"><span class="stock-label">Mínimo</span><strong>${produto.estoque_minimo}</strong></div>
                 <div class="stock-info status-box"><span class="stock-label">Status</span><strong>${status.label}</strong></div>
             </div>
 

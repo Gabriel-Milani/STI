@@ -90,11 +90,19 @@ def has_column(db, table, column):
     return any(row["name"] == column for row in db.execute(f"PRAGMA table_info({table})").fetchall())
 
 
+def has_table(db, table):
+    return db.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    ).fetchone() is not None
+
+
 def apply_migrations(db):
     if not has_column(db, "usuarios", "atualizado_em"):
         db.execute("ALTER TABLE usuarios ADD COLUMN atualizado_em TEXT")
     if not has_column(db, "usuarios", "ultimo_login"):
         db.execute("ALTER TABLE usuarios ADD COLUMN ultimo_login TEXT")
+    normalize_quantity_control(db)
     normalize_legacy_product_codes(db)
     db.execute("""
         CREATE TABLE IF NOT EXISTS produto_codigo_sequence (
@@ -124,6 +132,35 @@ def apply_migrations(db):
             if len(value) == 8 and value[0] == "P" and value[1:].isdigit():
                 maior = max(maior, int(value[1:]))
         db.execute("INSERT INTO codigo_barras_sequence (id, last_value) VALUES (1, ?)", (maior,))
+
+
+def normalize_quantity_control(db):
+    if not has_column(db, "produtos", "tipo_controle"):
+        return
+
+    if has_table(db, "produto_unidades"):
+        db.execute("""
+            UPDATE produtos
+            SET quantidade_atual = (
+                SELECT COUNT(*)
+                FROM produto_unidades
+                WHERE produto_unidades.produto_id = produtos.id
+                  AND produto_unidades.status = 'disponivel'
+            )
+            WHERE tipo_controle = 'unidade'
+              AND EXISTS (
+                SELECT 1
+                FROM produto_unidades
+                WHERE produto_unidades.produto_id = produtos.id
+            )
+        """)
+
+    prefix_sql = ", prefixo_rastreio = NULL" if has_column(db, "produtos", "prefixo_rastreio") else ""
+    db.execute(f"""
+        UPDATE produtos
+        SET tipo_controle = 'quantidade'{prefix_sql}
+        WHERE tipo_controle IS NULL OR tipo_controle <> 'quantidade'
+    """)
 
 
 def normalize_legacy_product_codes(db):

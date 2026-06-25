@@ -8,6 +8,22 @@ from ..services.products import ProductCreateError, ProductValidationError, crea
 
 produtos_bp = Blueprint("produtos", __name__)
 
+DEFAULT_CATEGORIES = [
+    "Adaptadores",
+    "Alimentação",
+    "Armazenamento",
+    "Base Notebook",
+    "Baterias",
+    "Cabos",
+    "Conversores",
+    "Extensores",
+    "Impressora",
+    "Limpeza",
+    "Periféricos",
+    "Placas PCI-e",
+    "Diversos",
+]
+
 
 def produto_payload(row, loc=None):
     data = row_to_dict(row)
@@ -63,6 +79,23 @@ def listar():
             else:
                 r["status"] = "ok"
         return api_ok({"produtos": rows})
+
+
+@produtos_bp.get("/categorias")
+@login_required
+def categorias():
+    with get_db() as db:
+        rows = db.execute(
+            """
+            SELECT DISTINCT TRIM(categoria) AS categoria
+            FROM produtos
+            WHERE ativo = 1 AND categoria IS NOT NULL AND TRIM(categoria) <> ''
+            ORDER BY categoria COLLATE NOCASE
+            """
+        ).fetchall()
+        values = {item for item in DEFAULT_CATEGORIES}
+        values.update(row["categoria"] for row in rows)
+        return api_ok({"categorias": sorted(values, key=lambda item: item.casefold())})
 
 
 @produtos_bp.post("")
@@ -130,6 +163,7 @@ def atualizar(produto_id):
         if minimo < 0:
             return api_error("Estoque mínimo não pode ser negativo.", 400)
         codigo_barras = (data.get("codigo_barras", produto["codigo_barras"]) or "").strip() or generate_barcode(db)
+        categoria = (data.get("categoria", produto["categoria"]) or "").strip() or "Diversos"
         try:
             db.execute(
                 """
@@ -139,7 +173,7 @@ def atualizar(produto_id):
                 """,
                 (
                     nome,
-                    data.get("categoria", produto["categoria"]),
+                    categoria,
                     data.get("modelo", produto["modelo"]),
                     codigo_barras,
                     minimo,

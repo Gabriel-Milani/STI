@@ -88,7 +88,11 @@
             <div class="modal-body">
                 <div class="row g-3">
                     <div class="col-md-6"><input class="form-control" name="nome" placeholder="Nome" required></div>
-                    <div class="col-md-6"><input class="form-control" name="categoria" placeholder="Categoria"></div>
+                    <div class="col-md-6">
+                        <select class="form-select product-category-select" name="categoria" id="editCategorySelect">
+                            <option value="">Carregando categorias...</option>
+                        </select>
+                    </div>
                     <div class="col-md-6"><input class="form-control" name="modelo" placeholder="Modelo"></div>
                     <div class="col-md-6"><input class="form-control" name="codigo_barras" placeholder="Código de barras"></div>
                     <div class="col-md-4"><input class="form-control" type="number" min="0" name="estoque_minimo" placeholder="Estoque mínimo"></div>

@@ -21,6 +21,7 @@ def normalize_product_payload(data):
     nome = (data.get("nome") or "").strip()
     if not nome:
         raise ProductValidationError("Informe o nome do produto.")
+    categoria = (data.get("categoria") or "").strip() or "Diversos"
 
     quantidade = parse_int(data.get("quantidade_inicial", data.get("quantidade_atual", 0)))
     minimo = parse_int(data.get("estoque_minimo", 0))
@@ -31,7 +32,7 @@ def normalize_product_payload(data):
 
     return {
         "nome": nome,
-        "categoria": data.get("categoria"),
+        "categoria": categoria,
         "modelo": data.get("modelo"),
         "codigo": str(data.get("codigo") or "").strip() or None,
         "codigo_barras": str(data.get("codigo_barras") or "").strip() or None,

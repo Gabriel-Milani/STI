@@ -2,6 +2,22 @@ mountNav("produtos");
 
 let product = null;
 let locations = [];
+const DEFAULT_CATEGORIES = [
+    "Adaptadores",
+    "Alimentação",
+    "Armazenamento",
+    "Base Notebook",
+    "Baterias",
+    "Cabos",
+    "Conversores",
+    "Extensores",
+    "Impressora",
+    "Limpeza",
+    "Periféricos",
+    "Placas PCI-e",
+    "Diversos",
+];
+let categories = [...DEFAULT_CATEGORIES];
 let selectedMoveShelf = "";
 let editModal = null;
 
@@ -94,6 +110,28 @@ async function loadLocations() {
     renderMoveLocationPicker();
 }
 
+function renderCategorySelect(selectId, selectedValue = "Diversos") {
+    const select = byId(selectId);
+    if (!select) return;
+    const selected = String(selectedValue || "Diversos");
+    const values = [...categories];
+    if (selected && !values.includes(selected)) values.push(selected);
+    select.innerHTML = values.map((categoria) =>
+        `<option value="${escapeHtml(categoria)}" ${categoria === selected ? "selected" : ""}>${escapeHtml(categoria)}</option>`
+    ).join("");
+}
+
+async function loadCategories() {
+    renderCategorySelect("editCategorySelect", product?.categoria);
+    try {
+        const { data } = await Api.get("/api/produtos/categorias");
+        categories = data.categorias?.length ? data.categorias : DEFAULT_CATEGORIES;
+    } catch (_error) {
+        categories = DEFAULT_CATEGORIES;
+    }
+    renderCategorySelect("editCategorySelect", product?.categoria);
+}
+
 async function loadProduct() {
     const { data } = await Api.get(`/api/produtos/${encodeURIComponent(pageCodeFromPath())}`);
     product = data.produto;
@@ -159,6 +197,7 @@ async function loadProduct() {
 
 function openEditModal() {
     const form = byId("editProductForm");
+    renderCategorySelect("editCategorySelect", product.categoria);
     ["nome", "categoria", "modelo", "codigo_barras", "estoque_minimo", "observacao"].forEach((field) => {
         if (form.elements[field]) form.elements[field].value = product[field] ?? "";
     });
@@ -241,7 +280,7 @@ function validateMovement(tipo, payload) {
 
 (async function init() {
     await requireAuth();
-    await loadLocations();
+    await Promise.all([loadCategories(), loadLocations()]);
     await loadProduct();
     editModal = new bootstrap.Modal(byId("editProductModal"));
     renderMovementFields();

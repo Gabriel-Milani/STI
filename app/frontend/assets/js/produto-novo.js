@@ -2,6 +2,22 @@ mountNav("produtos");
 
 let locations = [];
 let selectedShelf = "";
+const DEFAULT_CATEGORIES = [
+    "Adaptadores",
+    "Alimentação",
+    "Armazenamento",
+    "Base Notebook",
+    "Baterias",
+    "Cabos",
+    "Conversores",
+    "Extensores",
+    "Impressora",
+    "Limpeza",
+    "Periféricos",
+    "Placas PCI-e",
+    "Diversos",
+];
+let categories = [...DEFAULT_CATEGORIES];
 
 function shelfKey(loc) {
     return `${loc.armario}|${loc.prateleira}`;
@@ -41,9 +57,31 @@ async function loadLocations() {
     renderLocations();
 }
 
+function renderCategorySelect(selectId, selectedValue = "Diversos") {
+    const select = byId(selectId);
+    if (!select) return;
+    const selected = String(selectedValue || "Diversos");
+    const values = [...categories];
+    if (selected && !values.includes(selected)) values.push(selected);
+    select.innerHTML = values.map((categoria) =>
+        `<option value="${escapeHtml(categoria)}" ${categoria === selected ? "selected" : ""}>${escapeHtml(categoria)}</option>`
+    ).join("");
+}
+
+async function loadCategories() {
+    renderCategorySelect("categorySelect");
+    try {
+        const { data } = await Api.get("/api/produtos/categorias");
+        categories = data.categorias?.length ? data.categorias : DEFAULT_CATEGORIES;
+    } catch (_error) {
+        categories = DEFAULT_CATEGORIES;
+    }
+    renderCategorySelect("categorySelect");
+}
+
 (async function init() {
     await requireAuth();
-    await loadLocations();
+    await Promise.all([loadCategories(), loadLocations()]);
 
     byId("shelfOptions").addEventListener("click", (event) => {
         const button = event.target.closest("[data-shelf]");
