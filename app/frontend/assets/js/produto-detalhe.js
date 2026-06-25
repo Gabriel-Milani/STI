@@ -121,6 +121,35 @@ function renderCategorySelect(selectId, selectedValue = "Diversos") {
     ).join("");
 }
 
+function renderDetailLoading() {
+    if (byId("productInfo")) {
+        byId("productInfo").innerHTML = `
+            <div class="product-summary-top ops-skeleton-card">
+                <span class="ops-skeleton-icon"></span>
+                <div class="w-100">
+                    <span class="ops-skeleton-line short"></span>
+                    <span class="ops-skeleton-line title"></span>
+                    <span class="ops-skeleton-line"></span>
+                </div>
+            </div>
+            <div class="detail-metrics">
+                <div class="ops-skeleton-card"><span class="ops-skeleton-line"></span></div>
+                <div class="ops-skeleton-card"><span class="ops-skeleton-line"></span></div>
+                <div class="ops-skeleton-card"><span class="ops-skeleton-line"></span></div>
+            </div>
+        `;
+    }
+    if (byId("historyRows")) {
+        byId("historyRows").innerHTML = Array.from({ length: 4 }).map(() => `
+            <article class="history-item ops-skeleton-card">
+                <span class="ops-skeleton-icon"></span>
+                <span class="ops-skeleton-line"></span>
+                <span class="ops-skeleton-line short"></span>
+            </article>
+        `).join("");
+    }
+}
+
 async function loadCategories() {
     renderCategorySelect("editCategorySelect", product?.categoria);
     try {
@@ -188,7 +217,7 @@ async function loadProduct() {
                 <div class="history-qty">${mov.quantidade}</div>
             </article>
         `;
-    }).join("") || `<div class="detail-empty">Sem histórico.</div>`;
+    }).join("") || `<div class="detail-empty ops-empty-state">Sem histórico.</div>`;
     renderMoveLocationPicker();
     if (byId("movementFields")) {
         renderMovementFields();
@@ -235,7 +264,7 @@ function renderMoveLocationPicker() {
                 <span class="small text-secondary">${escapeHtml(loc.codigo)}${current ? " · atual" : ""}</span>
             </button>
         `;
-    }).join("") || `<div class="text-secondary">Nenhuma localização nessa prateleira.</div>`;
+    }).join("") || `<div class="ops-empty-state product-picker-empty">Nenhuma localização nessa prateleira.</div>`;
     const selected = locations.find((loc) => loc.codigo === selectedCode);
     byId("moveSelectionLabel").innerHTML = selected
         ? `Selecionado: <strong>${escapeHtml(friendlyLocation(selected))}</strong><div class="small">${escapeHtml(selected.codigo)}</div>`
@@ -280,6 +309,7 @@ function validateMovement(tipo, payload) {
 
 (async function init() {
     await requireAuth();
+    renderDetailLoading();
     await Promise.all([loadCategories(), loadLocations()]);
     await loadProduct();
     editModal = new bootstrap.Modal(byId("editProductModal"));

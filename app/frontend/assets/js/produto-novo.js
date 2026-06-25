@@ -19,6 +19,21 @@ const DEFAULT_CATEGORIES = [
 ];
 let categories = [...DEFAULT_CATEGORIES];
 
+function renderPickerLoading() {
+    byId("shelfOptions").innerHTML = Array.from({ length: 4 }).map(() => `
+        <div class="location-choice ops-skeleton-card">
+            <span class="ops-skeleton-line short"></span>
+            <span class="ops-skeleton-line"></span>
+        </div>
+    `).join("");
+    byId("locationCards").innerHTML = Array.from({ length: 4 }).map(() => `
+        <div class="location-choice ops-skeleton-card">
+            <span class="ops-skeleton-line short"></span>
+            <span class="ops-skeleton-line"></span>
+        </div>
+    `).join("");
+}
+
 function shelfKey(loc) {
     return `${loc.armario}|${loc.prateleira}`;
 }
@@ -36,7 +51,7 @@ function renderShelves() {
             <span class="fw-semibold">${escapeHtml(shelfLabel(key))}</span>
             <span class="small text-secondary">${locations.filter((loc) => shelfKey(loc) === key).length} opções</span>
         </button>
-    `).join("") || `<div class="text-secondary">Nenhuma prateleira cadastrada.</div>`;
+    `).join("") || `<div class="ops-empty-state product-picker-empty">Nenhuma prateleira cadastrada.</div>`;
 }
 
 function renderLocations() {
@@ -47,7 +62,15 @@ function renderLocations() {
             <span class="fw-semibold">${escapeHtml(loc.nome)}</span>
             <span class="small text-secondary">${escapeHtml(loc.codigo)} · ${loc.produtos_count} produtos</span>
         </button>
-    `).join("") || `<div class="text-secondary">Nenhuma localização nessa prateleira.</div>`;
+    `).join("") || `<div class="ops-empty-state product-picker-empty">Nenhuma localização nessa prateleira.</div>`;
+    const selectedLocation = locations.find((loc) => loc.codigo === selected);
+    const preview = byId("selectedLocationPreview");
+    if (preview) {
+        preview.innerHTML = selectedLocation
+            ? `<span>Selecionado</span><strong>${escapeHtml(friendlyLocation(selectedLocation))}</strong>`
+            : "Nenhuma localização selecionada.";
+        preview.classList.toggle("has-selection", Boolean(selectedLocation));
+    }
 }
 
 async function loadLocations() {
@@ -81,7 +104,12 @@ async function loadCategories() {
 
 (async function init() {
     await requireAuth();
-    await Promise.all([loadCategories(), loadLocations()]);
+    try {
+        renderPickerLoading();
+        await Promise.all([loadCategories(), loadLocations()]);
+    } catch (error) {
+        setAlert(error.message, "danger");
+    }
 
     byId("shelfOptions").addEventListener("click", (event) => {
         const button = event.target.closest("[data-shelf]");
@@ -105,11 +133,17 @@ async function loadCategories() {
             setAlert("Escolha uma localização para o produto.", "danger");
             return;
         }
+        const submit = byId("createProductButton");
+        if (submit.disabled) return;
+        submit.disabled = true;
+        submit.textContent = "Cadastrando...";
         try {
             const { data } = await Api.post("/api/produtos", formDataObject(event.currentTarget));
             window.location.href = `/produtos/${encodeURIComponent(data.codigo)}`;
         } catch (error) {
             setAlert(error.message, "danger");
+            submit.disabled = false;
+            submit.textContent = "Cadastrar produto";
         }
     });
 })();

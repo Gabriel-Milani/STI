@@ -32,6 +32,29 @@
                         <button class="filter-chip" type="button" data-filter="baixo"><span>⚠</span> Estoque baixo</button>
                         <button class="filter-chip" type="button" data-filter="zerado"><span>⊘</span> Zerados</button>
                     </div>
+                    <div class="catalog-refine mt-3">
+                        <label>
+                            <span>Categoria</span>
+                            <select class="form-select catalog-filter-select" id="categoryFilter">
+                                <option value="">Todas as categorias</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Localização</span>
+                            <select class="form-select catalog-filter-select" id="locationFilter">
+                                <option value="">Todas as localizações</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Ordenar</span>
+                            <select class="form-select catalog-filter-select" id="sortFilter">
+                                <option value="nome">Nome</option>
+                                <option value="estoque-asc">Menor estoque</option>
+                                <option value="estoque-desc">Maior estoque</option>
+                                <option value="categoria">Categoria</option>
+                            </select>
+                        </label>
+                    </div>
                 </section>
 
                 <section class="catalog-metrics mb-3" id="catalogMetrics"></section>

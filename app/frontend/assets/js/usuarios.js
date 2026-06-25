@@ -31,7 +31,13 @@ function renderUsers() {
                 </div>
             </td>
         </tr>
-    `).join("") || `<tr><td colspan="5" class="text-secondary">Nenhum usuário encontrado.</td></tr>`;
+    `).join("") || `<tr><td colspan="5"><div class="ops-empty-state table-empty-state">Nenhum usuário encontrado.</div></td></tr>`;
+}
+
+function renderUsersLoading() {
+    byId("userRows").innerHTML = Array.from({ length: 5 }).map(() => `
+        <tr class="table-loading-row"><td colspan="5"><span class="ops-skeleton-line"></span></td></tr>
+    `).join("");
 }
 
 async function loadUsers() {
@@ -85,6 +91,7 @@ function userPayload(form) {
     await requireAuth();
     userModal = new bootstrap.Modal(byId("userModal"));
     passwordModal = new bootstrap.Modal(byId("passwordModal"));
+    renderUsersLoading();
     await loadUsers();
 
     byId("newUserButton").addEventListener("click", openNewUser);

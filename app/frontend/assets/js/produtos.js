@@ -1,8 +1,14 @@
 mountNav("produtos");
 
 let products = [];
+let locations = [];
+let categories = [];
 let activeFilter = "todos";
 let activeLocationsCount = 0;
+let searchTerm = "";
+let activeCategory = "";
+let activeLocation = "";
+let sortMode = "nome";
 
 function pixelImg(src, alt = "") {
     return `<img class="pixel-asset-img" src="${src}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" onload="this.parentElement.classList.add('has-asset')" onerror="this.remove()">`;
@@ -21,10 +27,31 @@ function statusMeta(status) {
 }
 
 function productMatchesFilter(produto) {
-    if (activeFilter === "todos") return true;
+    const text = [
+        produto.nome,
+        produto.modelo,
+        produto.codigo,
+        produto.codigo_barras,
+        produto.categoria,
+        produto.localizacao_label,
+        produto.localizacao_nome,
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (searchTerm && !text.includes(searchTerm)) return false;
+    if (activeCategory && String(produto.categoria || "") !== activeCategory) return false;
+    if (activeLocation && String(produto.localizacao_codigo || "") !== activeLocation) return false;
     if (activeFilter === "baixo") return produto.status === "baixo";
     if (activeFilter === "zerado") return produto.status === "zerado";
     return true;
+}
+
+function sortProducts(rows) {
+    const collator = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
+    return [...rows].sort((a, b) => {
+        if (sortMode === "estoque-asc") return Number(a.quantidade_atual || 0) - Number(b.quantidade_atual || 0);
+        if (sortMode === "estoque-desc") return Number(b.quantidade_atual || 0) - Number(a.quantidade_atual || 0);
+        if (sortMode === "categoria") return collator.compare(a.categoria || "", b.categoria || "") || collator.compare(a.nome || "", b.nome || "");
+        return collator.compare(a.nome || "", b.nome || "");
+    });
 }
 
 function movementLink(produto, type) {
@@ -33,7 +60,7 @@ function movementLink(produto, type) {
 
 function renderEmpty() {
     return `
-        <div class="catalog-empty">
+        <div class="catalog-empty ops-empty-state">
             <div class="empty-terminal">
                 <div class="empty-face">▣</div>
             </div>
@@ -42,6 +69,26 @@ function renderEmpty() {
             <a class="btn catalog-new-empty" href="/produtos/novo">＋ Novo produto</a>
         </div>
     `;
+}
+
+function renderLoading() {
+    byId("catalogMetrics").innerHTML = Array.from({ length: 4 }).map(() => `
+        <article class="catalog-metric ops-skeleton-card">
+            <span class="ops-skeleton-icon"></span>
+            <div class="w-100">
+                <span class="ops-skeleton-line short"></span>
+                <span class="ops-skeleton-line"></span>
+            </div>
+        </article>
+    `).join("");
+    byId("productGrid").innerHTML = Array.from({ length: 6 }).map(() => `
+        <article class="product-card product-card-loading ops-skeleton-card">
+            <span class="ops-skeleton-line short"></span>
+            <span class="ops-skeleton-line title"></span>
+            <span class="ops-skeleton-line"></span>
+            <span class="ops-skeleton-line"></span>
+        </article>
+    `).join("");
 }
 
 function renderMetrics() {
@@ -119,27 +166,56 @@ function renderCard(produto) {
 }
 
 function renderProducts() {
-    const visible = products.filter(productMatchesFilter);
+    const visible = sortProducts(products.filter(productMatchesFilter));
     byId("productCount").textContent = visible.length;
     renderMetrics();
     byId("productGrid").innerHTML = visible.length ? visible.map(renderCard).join("") : renderEmpty();
 }
 
-async function loadProducts(query = "") {
-    const { data } = await Api.get(`/api/produtos${query ? `?q=${encodeURIComponent(query)}` : ""}`);
-    products = data.produtos;
-    renderProducts();
+function populateFilters() {
+    const categorySelect = byId("categoryFilter");
+    const locationSelect = byId("locationFilter");
+    if (categorySelect) {
+        const values = categories.length
+            ? categories
+            : [...new Set(products.map((produto) => produto.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+        categorySelect.innerHTML = `<option value="">Todas as categorias</option>` + values.map((categoria) =>
+            `<option value="${escapeHtml(categoria)}">${escapeHtml(categoria)}</option>`
+        ).join("");
+        categorySelect.value = activeCategory;
+    }
+    if (locationSelect) {
+        locationSelect.innerHTML = `<option value="">Todas as localizações</option>` + locations.map((loc) =>
+            `<option value="${escapeHtml(loc.codigo)}">${escapeHtml(friendlyLocation(loc))}</option>`
+        ).join("");
+        locationSelect.value = activeLocation;
+    }
+}
+
+function applyUrlFilters() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("baixo") === "1") activeFilter = "baixo";
+    if (params.get("zerado") === "1") activeFilter = "zerado";
+    byId("filterChips").querySelectorAll("[data-filter]").forEach((chip) => {
+        chip.classList.toggle("active", chip.dataset.filter === activeFilter);
+    });
 }
 
 (async function init() {
     try {
-        const [, locationsResponse, productsResponse] = await Promise.all([
+        renderLoading();
+        applyUrlFilters();
+        const [, locationsResponse, categoriesResponse, productsResponse] = await Promise.all([
             requireAuth(),
             Api.get("/api/localizacoes").catch(() => null),
+            Api.get("/api/produtos/categorias").catch(() => null),
             Api.get("/api/produtos"),
         ]);
-        activeLocationsCount = locationsResponse ? locationsResponse.data.localizacoes.length : 0;
+        locations = locationsResponse ? sortLocations(locationsResponse.data.localizacoes) : [];
+        categories = categoriesResponse ? categoriesResponse.data.categorias || [] : [];
+        activeLocationsCount = locations.length;
         products = productsResponse.data.produtos;
+        populateFilters();
         renderProducts();
     } catch (error) {
         activeLocationsCount = 0;
@@ -153,12 +229,24 @@ async function loadProducts(query = "") {
 
     byId("searchForm").addEventListener("submit", async (event) => {
         event.preventDefault();
-        await loadProducts(new FormData(event.currentTarget).get("q"));
+        searchTerm = String(new FormData(event.currentTarget).get("q") || "").trim().toLowerCase();
+        renderProducts();
     });
 
-    byId("clearSearch").addEventListener("click", async () => {
+    byId("clearSearch").addEventListener("click", () => {
         byId("searchForm").reset();
-        await loadProducts();
+        searchTerm = "";
+        activeCategory = "";
+        activeLocation = "";
+        activeFilter = "todos";
+        sortMode = "nome";
+        if (byId("categoryFilter")) byId("categoryFilter").value = "";
+        if (byId("locationFilter")) byId("locationFilter").value = "";
+        if (byId("sortFilter")) byId("sortFilter").value = "nome";
+        byId("filterChips").querySelectorAll("[data-filter]").forEach((chip) => {
+            chip.classList.toggle("active", chip.dataset.filter === activeFilter);
+        });
+        renderProducts();
     });
 
     byId("filterChips").addEventListener("click", (event) => {
@@ -168,6 +256,21 @@ async function loadProducts(query = "") {
         byId("filterChips").querySelectorAll("[data-filter]").forEach((item) => {
             item.classList.toggle("active", item === chip);
         });
+        renderProducts();
+    });
+
+    byId("categoryFilter")?.addEventListener("change", (event) => {
+        activeCategory = event.currentTarget.value;
+        renderProducts();
+    });
+
+    byId("locationFilter")?.addEventListener("change", (event) => {
+        activeLocation = event.currentTarget.value;
+        renderProducts();
+    });
+
+    byId("sortFilter")?.addEventListener("change", (event) => {
+        sortMode = event.currentTarget.value;
         renderProducts();
     });
 })();

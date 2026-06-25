@@ -41,6 +41,9 @@ function focusScannerInput(form) {
             return;
         }
 
+        const submit = form.querySelector("button[type='submit']");
+        submit.disabled = true;
+        submit.textContent = "Buscando...";
         try {
             const { data } = await Api.get(`/api/scanner/buscar/${encodeURIComponent(codigo)}`);
             const url = productUrlFromScan(data);
@@ -54,6 +57,8 @@ function focusScannerInput(form) {
                 setAlert(error.message, "danger");
             }
         } finally {
+            submit.disabled = false;
+            submit.textContent = "Buscar";
             focusScannerInput(form);
         }
     });

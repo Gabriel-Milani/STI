@@ -2,8 +2,15 @@ mountNav("emprestimos");
 
 const modal = new bootstrap.Modal(byId("returnModal"));
 
+function renderLoansLoading() {
+    byId("loanRows").innerHTML = Array.from({ length: 5 }).map(() => `
+        <tr class="table-loading-row"><td colspan="6"><span class="ops-skeleton-line"></span></td></tr>
+    `).join("");
+}
+
 async function loadLoans() {
     const status = byId("statusFilter").value;
+    renderLoansLoading();
     const { data } = await Api.get(`/api/emprestimos?status=${encodeURIComponent(status)}`);
     byId("loanRows").innerHTML = data.emprestimos.map((loan) => `
         <tr>
@@ -14,7 +21,7 @@ async function loadLoans() {
             <td class="text-end">${loan.quantidade}</td>
             <td class="text-end">${loan.status === "aberto" ? `<button class="btn btn-sm btn-outline-primary" data-return="${loan.id}">Devolver</button>` : `<span class="badge bg-secondary">Devolvido</span>`}</td>
         </tr>
-    `).join("") || `<tr><td colspan="6" class="text-secondary">Nenhum empréstimo encontrado.</td></tr>`;
+    `).join("") || `<tr><td colspan="6"><div class="ops-empty-state table-empty-state">Nenhum empréstimo encontrado.</div></td></tr>`;
 }
 
 (async function init() {

@@ -84,6 +84,34 @@ function renderMetrics(resumo) {
     `).join("");
 }
 
+function renderDashboardLoading() {
+    byId("metrics").innerHTML = Array.from({ length: 4 }).map(() => `
+        <article class="dashboard-metric ops-skeleton-card">
+            <span class="ops-skeleton-icon"></span>
+            <div class="dashboard-metric-body w-100">
+                <span class="ops-skeleton-line short"></span>
+                <span class="ops-skeleton-line title"></span>
+                <span class="ops-skeleton-line"></span>
+            </div>
+        </article>
+    `).join("");
+    byId("weekChart").innerHTML = `
+        <div class="dashboard-chart-loading ops-skeleton-card">
+            <span class="ops-skeleton-line short"></span>
+            <span class="ops-skeleton-line title"></span>
+            <span class="ops-skeleton-line"></span>
+        </div>
+    `;
+    ["criticalRows", "movementRows", "locationRows", "mapRows"].forEach((id) => {
+        byId(id).innerHTML = Array.from({ length: 4 }).map(() => `
+            <div class="dashboard-list-loading ops-skeleton-card">
+                <span class="ops-skeleton-icon"></span>
+                <span class="ops-skeleton-line"></span>
+            </div>
+        `).join("");
+    });
+}
+
 function renderCritical(rows) {
     byId("criticalRows").innerHTML = rows.map((item) => {
         const icon = productIconName(item);
@@ -100,7 +128,7 @@ function renderCritical(rows) {
                 <span class="item-qty">${formatNumber(item.quantidade_atual)} unid.<small>Mín: ${formatNumber(item.estoque_minimo)}</small></span>
             </a>
         `;
-    }).join("") || `<div class="dashboard-empty">Nenhum item crítico.</div>`;
+    }).join("") || `<div class="dashboard-empty ops-empty-state">Nenhum item crítico.</div>`;
 }
 
 function renderMovements(rows) {
@@ -119,57 +147,76 @@ function renderMovements(rows) {
                 <span class="movement-meta">${escapeHtml(movementWhen(item.data_hora))}<small>por ${escapeHtml(user)}</small></span>
             </a>
         `;
-    }).join("") || `<div class="dashboard-empty">Sem movimentações.</div>`;
+    }).join("") || `<div class="dashboard-empty ops-empty-state">Sem movimentações.</div>`;
 }
 
 function renderChart(rows) {
-    const labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-    const keys = Array.from({ length: 7 }, (_, index) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (6 - index));
-        return date.toISOString().slice(0, 10);
-    });
-    const plot = { x: 34, y: 12, w: 466, h: 174 };
+    const safeRows = rows && rows.length ? rows : [];
     const definitions = [
-        ["entrada", "#35d28f"],
-        ["retirada", "#ef5864"],
-        ["emprestimo", "#5a8cff"],
-        ["devolucao", "#9278c9"],
+        ["entrada", "Entradas", "#35d28f"],
+        ["retirada", "Saídas", "#ef5864"],
+        ["emprestimo", "Empréstimos", "#5a8cff"],
+        ["devolucao", "Devoluções", "#9278c9"],
     ];
-    const series = definitions.map(([tipo, color]) => ({
-        color,
-        values: keys.map((key) => {
-            const row = rows.find((item) => item.dia === key && item.tipo === tipo);
-            return Math.min(100, Number(row ? row.total : 0));
-        }),
-    }));
-    const xFor = (index) => plot.x + (index * plot.w / 6);
-    const yFor = (value) => plot.y + plot.h - (value / 100) * plot.h;
-    const pointsFor = (values) => values.map((value, index) => `${xFor(index)},${yFor(value)}`).join(" ");
-    const circlesFor = (values, color) => values.map((value, index) =>
-        `<circle cx="${xFor(index)}" cy="${yFor(value)}" r="4" fill="${color}" stroke="#dffcff" stroke-width="2"></circle>`
-    ).join("");
+    const maxValue = Math.max(0, ...safeRows.flatMap((row) => definitions.map(([key]) => Number(row[key] || 0))));
+    const niceMax = Math.max(1, Math.ceil(maxValue / 5) * 5);
+    const totalWeek = safeRows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+    const plot = { x: 44, y: 14, w: 520, h: 154 };
+    const ticks = [0, .25, .5, .75, 1].map((ratio) => Math.round(niceMax * ratio));
+    const dayGap = plot.w / Math.max(1, safeRows.length);
+    const groupWidth = Math.min(46, dayGap * .58);
+    const barGap = 3;
+    const barWidth = (groupWidth - barGap * (definitions.length - 1)) / definitions.length;
+    const yFor = (value) => plot.y + plot.h - (Number(value || 0) / niceMax) * plot.h;
+
+    if (!safeRows.length) {
+        byId("weekChart").innerHTML = `<div class="chart-empty ops-empty-state">Sem dados para montar o gráfico.</div>`;
+        return;
+    }
+
+    const bars = safeRows.map((row, dayIndex) => {
+        const groupX = plot.x + dayIndex * dayGap + (dayGap - groupWidth) / 2;
+        return definitions.map(([key, label, color], typeIndex) => {
+            const value = Number(row[key] || 0);
+            const height = Math.max(value > 0 ? 3 : 0, plot.y + plot.h - yFor(value));
+            const x = groupX + typeIndex * (barWidth + barGap);
+            const y = plot.y + plot.h - height;
+            return `
+                <rect class="chart-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${height.toFixed(1)}" rx="2" fill="${color}">
+                    <title>${escapeHtml(row.label)} ${escapeHtml(row.data_label)} · ${escapeHtml(label)}: ${formatNumber(value)}</title>
+                </rect>
+            `;
+        }).join("");
+    }).join("");
 
     byId("weekChart").innerHTML = `
-        <svg viewBox="0 0 510 220" role="img" aria-label="Movimentações dos últimos sete dias">
+        <div class="chart-summary">
+            <strong>${formatNumber(totalWeek)}</strong>
+            <span>movimentações nos últimos 7 dias</span>
+        </div>
+        <svg viewBox="0 0 590 202" role="img" aria-label="Movimentações dos últimos sete dias">
             <defs>
                 <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#18b48a" stop-opacity=".28"></stop>
-                    <stop offset="100%" stop-color="#0b1626" stop-opacity=".02"></stop>
+                    <stop offset="0%" stop-color="#10223a" stop-opacity="1"></stop>
+                    <stop offset="100%" stop-color="#091522" stop-opacity="1"></stop>
                 </linearGradient>
             </defs>
             <rect class="chart-plot" x="${plot.x}" y="${plot.y}" width="${plot.w}" height="${plot.h}" rx="2"></rect>
-            ${[0, 20, 40, 60, 80, 100].map((value) => {
+            ${ticks.map((value) => {
                 const y = yFor(value);
                 return `<text class="chart-y-label" x="24" y="${y + 4}" text-anchor="end">${value}</text><line x1="${plot.x}" x2="${plot.x + plot.w}" y1="${y}" y2="${y}" class="chart-grid"></line>`;
             }).join("")}
-            ${labels.map((_, index) => {
-                const x = xFor(index);
+            ${safeRows.map((_, index) => {
+                const x = plot.x + index * dayGap + dayGap / 2;
                 return `<line x1="${x}" x2="${x}" y1="${plot.y}" y2="${plot.y + plot.h}" class="chart-grid soft"></line>`;
             }).join("")}
-            <polygon points="${plot.x},${plot.y + plot.h} ${pointsFor(series[0].values)} ${plot.x + plot.w},${plot.y + plot.h}" fill="url(#chartFill)"></polygon>
-            ${series.map((item) => `<polyline points="${pointsFor(item.values)}" fill="none" stroke="${item.color}" stroke-width="3"></polyline>${circlesFor(item.values, item.color)}`).join("")}
-            ${labels.map((label, index) => `<text class="chart-x-label" x="${xFor(index)}" y="209" text-anchor="middle">${label}</text>`).join("")}
+            ${bars}
+            ${safeRows.map((row, index) => {
+                const x = plot.x + index * dayGap + dayGap / 2;
+                return `
+                    <text class="chart-x-label" x="${x}" y="190" text-anchor="middle">${escapeHtml(row.label)} ${escapeHtml(row.data_label)}</text>
+                `;
+            }).join("")}
         </svg>
     `;
 }
@@ -186,7 +233,7 @@ function renderLocations(rows) {
                 <b>${pct}%</b>
             </div>
         `;
-    }).join("") || `<div class="dashboard-empty">Sem localizações ativas.</div>`;
+    }).join("") || `<div class="dashboard-empty ops-empty-state">Sem localizações ativas.</div>`;
 }
 
 function renderMap(rows) {
@@ -205,6 +252,7 @@ function renderMap(rows) {
 
 (async function init() {
     try {
+        renderDashboardLoading();
         const [, { data }] = await Promise.all([
             requireAuth(),
             Api.get("/api/dashboard"),

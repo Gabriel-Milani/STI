@@ -1,4 +1,6 @@
 from flask import Blueprint
+import pandas as pd
+
 from ..database import get_db, rows_to_list
 from ..services.auth_utils import login_required
 from ..services.helpers import api_ok
@@ -6,6 +8,43 @@ from ..services.helpers import api_ok
 _dashboard_bp = Blueprint("dashboard", __name__)
 
 dashboard_bp = _dashboard_bp
+
+
+def weekly_movements(db):
+    db_today = db.execute("SELECT DATE('now') AS today").fetchone()["today"]
+    end = pd.Timestamp(db_today)
+    days = pd.date_range(end=end, periods=7, freq="D")
+    frame = pd.read_sql_query(
+        """
+        SELECT DATE(data_hora) AS dia, tipo, COALESCE(SUM(quantidade), 0) AS total
+        FROM movimentacoes
+        WHERE DATE(data_hora) BETWEEN DATE('now', '-6 days') AND DATE('now')
+        GROUP BY DATE(data_hora), tipo
+        """,
+        db,
+    )
+    tipos = ["entrada", "retirada", "emprestimo", "devolucao"]
+    if frame.empty:
+        pivot = pd.DataFrame(0, index=days.strftime("%Y-%m-%d"), columns=tipos)
+    else:
+        frame["dia"] = pd.to_datetime(frame["dia"]).dt.strftime("%Y-%m-%d")
+        pivot = frame.pivot_table(index="dia", columns="tipo", values="total", aggfunc="sum", fill_value=0)
+        pivot = pivot.reindex(days.strftime("%Y-%m-%d"), fill_value=0)
+        pivot = pivot.reindex(columns=tipos, fill_value=0)
+
+    labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    result = []
+    for dia, row in pivot.iterrows():
+        date = pd.Timestamp(dia)
+        values = {tipo: int(row[tipo]) for tipo in tipos}
+        result.append({
+            "dia": dia,
+            "label": labels[date.weekday()],
+            "data_label": date.strftime("%d/%m"),
+            **values,
+            "total": sum(values.values()),
+        })
+    return result
 
 
 @dashboard_bp.get("")
@@ -37,15 +76,7 @@ def resumo():
             LIMIT 5
             """
         ).fetchall()
-        semana = db.execute(
-            """
-            SELECT DATE(data_hora) AS dia, tipo, COALESCE(SUM(quantidade), 0) AS total
-            FROM movimentacoes
-            WHERE DATE(data_hora) >= DATE('now', '-6 days')
-            GROUP BY DATE(data_hora), tipo
-            ORDER BY dia
-            """
-        ).fetchall()
+        semana = weekly_movements(db)
         localizacoes = db.execute(
             """
             SELECT l.codigo, l.nome, l.armario, l.prateleira,
@@ -98,7 +129,7 @@ def resumo():
             },
             "ultimas_movimentacoes": rows_to_list(ultimas),
             "estoque_critico": rows_to_list(criticos),
-            "movimentacoes_semana": rows_to_list(semana),
+            "movimentacoes_semana": semana,
             "localizacoes_mais_usadas": rows_to_list(localizacoes),
             "mapa_operacional": rows_to_list(mapa),
         })

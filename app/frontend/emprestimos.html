@@ -7,15 +7,24 @@
     <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link href="/assets/styles.css" rel="stylesheet">
 </head>
-<body class="ops-app-page pixel-ops-page">
-<div class="container-fluid app-shell"><div class="row">
-    <aside class="col-md-3 col-lg-2 sidebar p-3"><nav id="appNav" class="nav flex-column"></nav></aside>
-    <main class="col-md-9 col-lg-10 p-3 p-lg-4"><div class="content-wrap mx-auto">
+<body class="ops-app-page pixel-ops-page loans-page">
+<div class="container-fluid app-shell px-0"><div class="row g-0 min-vh-100">
+    <aside class="sidebar pixel-sidebar"><nav id="appNav" class="nav flex-column pixel-nav"></nav></aside>
+    <main class="pixel-main"><div class="pixel-content">
         <div id="alert"></div>
-        <div class="card shadow-sm"><div class="card-body">
-            <div class="d-flex justify-content-end mb-3"><select id="statusFilter" class="form-select w-auto"><option value="aberto">Abertos</option><option value="todos">Todos</option><option value="devolvido">Devolvidos</option></select></div>
-            <div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Produto</th><th>Para</th><th>Destino</th><th>Data</th><th class="text-end">Qtd.</th><th></th></tr></thead><tbody id="loanRows"></tbody></table></div>
-        </div></div>
+        <section class="ops-toolbar-panel">
+            <label class="ops-toolbar-field">
+                <span>Status</span>
+                <select id="statusFilter" class="form-select">
+                    <option value="aberto">Abertos</option>
+                    <option value="todos">Todos</option>
+                    <option value="devolvido">Devolvidos</option>
+                </select>
+            </label>
+        </section>
+        <section class="ops-table-panel">
+            <div class="table-responsive"><table class="table table-hover mb-0 ops-data-table"><thead><tr><th>Produto</th><th>Para</th><th>Destino</th><th>Data</th><th class="text-end">Qtd.</th><th></th></tr></thead><tbody id="loanRows"></tbody></table></div>
+        </section>
     </div></main>
 </div></div>
 <div class="modal fade" id="returnModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form id="returnForm" class="modal-content"><div class="modal-header"><h2 class="modal-title h5">Registrar devolução</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div><div class="modal-body vstack gap-3"><input type="hidden" name="id" id="returnId"><input class="form-control" name="recebido_por" placeholder="Recebido por" required><textarea class="form-control" name="observacao" rows="2" placeholder="Observação"></textarea></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Devolver</button></div></form></div></div>

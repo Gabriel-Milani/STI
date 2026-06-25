@@ -18,6 +18,29 @@
             <div class="pixel-content movements-content">
                 <div id="alert"></div>
 
+                <section class="movements-toolbar">
+                    <form id="movementFilterForm" class="movements-filter-form">
+                        <label>
+                            <span>Busca</span>
+                            <input class="form-control" name="q" placeholder="Produto, código, responsável ou usuário...">
+                        </label>
+                        <label>
+                            <span>Tipo</span>
+                            <select class="form-select" id="movementTypeFilter">
+                                <option value="">Todos os tipos</option>
+                                <option value="entrada">Entrada</option>
+                                <option value="retirada">Retirada</option>
+                                <option value="emprestimo">Empréstimo</option>
+                                <option value="devolucao">Devolução</option>
+                                <option value="descarte">Descarte</option>
+                                <option value="mover">Mover</option>
+                            </select>
+                        </label>
+                        <button class="btn btn-primary" type="submit">Filtrar</button>
+                        <button class="btn btn-outline-secondary" type="button" id="clearMovementFilters">Limpar</button>
+                    </form>
+                </section>
+
                 <section class="movements-panel">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 movements-table">

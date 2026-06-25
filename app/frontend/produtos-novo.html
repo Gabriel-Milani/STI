@@ -7,49 +7,83 @@
     <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
     <link href="/assets/styles.css" rel="stylesheet">
 </head>
-<body class="ops-app-page pixel-ops-page">
-<div class="container-fluid app-shell"><div class="row">
-    <aside class="col-md-3 col-lg-2 sidebar p-3"><nav id="appNav" class="nav flex-column"></nav></aside>
-    <main class="col-md-9 col-lg-10 p-3 p-lg-4"><div class="content-wrap mx-auto">
+<body class="ops-app-page pixel-ops-page product-new-page">
+<div class="container-fluid app-shell px-0"><div class="row g-0 min-vh-100">
+    <aside class="sidebar pixel-sidebar"><nav id="appNav" class="nav flex-column pixel-nav"></nav></aside>
+    <main class="pixel-main"><div class="pixel-content">
         <div id="alert"></div>
-        <form id="productForm">
-            <div class="row g-4">
-                <section class="col-xl-5">
-                    <div class="card shadow-sm"><div class="card-header bg-white fw-semibold">Dados do produto</div>
-                        <div class="card-body vstack gap-3">
-                            <input class="form-control" name="nome" placeholder="Nome" required autofocus>
-                            <select class="form-select product-category-select" name="categoria" id="categorySelect">
-                                <option value="">Carregando categorias...</option>
-                            </select>
-                            <input class="form-control" name="modelo" placeholder="Modelo">
-                            <input class="form-control" name="codigo_barras" placeholder="Código de barras">
-                            <div class="row g-2"><div class="col"><input class="form-control" type="number" min="0" name="quantidade_inicial" placeholder="Qtd. inicial" value="0"></div><div class="col"><input class="form-control" type="number" min="0" name="estoque_minimo" placeholder="Mínimo" value="0"></div></div>
-                            <textarea class="form-control" name="observacao" rows="3" placeholder="Observação"></textarea>
+        <form id="productForm" class="product-new-layout">
+            <section class="product-form-panel">
+                <div class="detail-panel-header">
+                    <div>
+                        <span class="panel-kicker">Dados do produto</span>
+                        <h2>Ficha do item</h2>
+                    </div>
+                    <span class="panel-chip">Quantidade</span>
+                </div>
+                <div class="product-form-grid">
+                    <label class="form-field form-field-wide">
+                        <span>Nome</span>
+                        <input class="form-control" name="nome" placeholder="Nome do produto" required autofocus>
+                    </label>
+                    <label class="form-field">
+                        <span>Categoria</span>
+                        <select class="form-select product-category-select" name="categoria" id="categorySelect">
+                            <option value="">Carregando categorias...</option>
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Modelo</span>
+                        <input class="form-control" name="modelo" placeholder="Modelo">
+                    </label>
+                    <label class="form-field">
+                        <span>Código de barras</span>
+                        <input class="form-control" name="codigo_barras" placeholder="Opcional, o sistema cria se vazio">
+                    </label>
+                    <div class="form-field-row">
+                        <label class="form-field">
+                            <span>Qtd. inicial</span>
+                            <input class="form-control" type="number" min="0" name="quantidade_inicial" placeholder="0" value="0">
+                        </label>
+                        <label class="form-field">
+                            <span>Mínimo</span>
+                            <input class="form-control" type="number" min="0" name="estoque_minimo" placeholder="0" value="0">
+                        </label>
+                    </div>
+                    <label class="form-field form-field-wide">
+                        <span>Observação</span>
+                        <textarea class="form-control" name="observacao" rows="4" placeholder="Detalhes úteis para o setor"></textarea>
+                    </label>
+                </div>
+            </section>
+
+            <section class="product-form-panel product-location-panel">
+                <div class="detail-panel-header">
+                    <div>
+                        <span class="panel-kicker">Mapa operacional</span>
+                        <h2>Localização</h2>
+                    </div>
+                    <span class="panel-chip">Obrigatório</span>
+                </div>
+                <input type="hidden" name="localizacao_codigo" id="selectedLocation" required>
+                <div class="location-picker-layout">
+                    <div>
+                        <div class="picker-label">Prateleira</div>
+                        <div id="shelfOptions" class="location-grid"></div>
+                    </div>
+                    <div>
+                        <div class="picker-label">Localização</div>
+                        <div id="locationCards" class="location-grid">
+                            <div class="ops-empty-state product-picker-empty">Escolha uma prateleira primeiro.</div>
                         </div>
                     </div>
-                </section>
-                <section class="col-xl-7">
-                    <div class="card shadow-sm"><div class="card-header bg-white fw-semibold">Localização</div>
-                        <div class="card-body">
-                            <input type="hidden" name="localizacao_codigo" id="selectedLocation" required>
-                            <div class="mb-3">
-                                <div class="small text-secondary mb-2">Prateleira</div>
-                                <div id="shelfOptions" class="location-grid"></div>
-                            </div>
-                            <div>
-                                <div class="small text-secondary mb-2">Localização</div>
-                                <div id="locationCards" class="location-grid">
-                                    <div class="text-secondary">Escolha uma prateleira primeiro.</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-end gap-2 mt-3">
-                        <a class="btn btn-outline-secondary" href="/produtos">Cancelar</a>
-                        <button class="btn btn-primary" type="submit">Cadastrar produto</button>
-                    </div>
-                </section>
-            </div>
+                </div>
+                <div id="selectedLocationPreview" class="selected-location-preview">Nenhuma localização selecionada.</div>
+                <div class="product-form-actions">
+                    <a class="btn btn-outline-secondary" href="/produtos">Cancelar</a>
+                    <button class="btn btn-primary" type="submit" id="createProductButton">Cadastrar produto</button>
+                </div>
+            </section>
         </form>
     </div></main>
 </div></div>

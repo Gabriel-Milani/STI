@@ -61,6 +61,35 @@ function shelfMetric(label, value) {
     return `<div><span>${escapeHtml(label)}</span><strong>${value}</strong></div>`;
 }
 
+function renderLocationsLoading() {
+    byId("operationalMap").innerHTML = `
+        <article class="operational-cabinet-card ops-skeleton-card">
+            <div class="cabinet-header">
+                <span class="ops-skeleton-icon"></span>
+                <div class="w-100">
+                    <span class="ops-skeleton-line short"></span>
+                    <span class="ops-skeleton-line title"></span>
+                </div>
+            </div>
+            <div class="shelf-grid">
+                ${Array.from({ length: 6 }).map(() => `
+                    <article class="shelf-card ops-skeleton-card">
+                        <span class="ops-skeleton-line short"></span>
+                        <span class="ops-skeleton-line title"></span>
+                        <span class="ops-skeleton-line"></span>
+                    </article>
+                `).join("")}
+            </div>
+        </article>
+    `;
+    byId("futureExpansion").innerHTML = Array.from({ length: 3 }).map(() => `
+        <article class="future-card ops-skeleton-card">
+            <span class="ops-skeleton-icon"></span>
+            <span class="ops-skeleton-line"></span>
+        </article>
+    `).join("");
+}
+
 function renderShelfDetail(data) {
     const shelf = data.prateleira;
     activeShelf = shelf;
@@ -86,7 +115,7 @@ function renderShelfDetail(data) {
             <button type="button" data-edit-location-id="${loc.id}">Editar</button>
             <button type="button" data-move-location-id="${loc.id}">Mover</button>
         </article>
-    `).join("") || `<div class="locations-empty">Nenhuma localização cadastrada nessa prateleira.</div>`;
+    `).join("") || `<div class="locations-empty ops-empty-state">Nenhuma localização cadastrada nessa prateleira.</div>`;
     byId("shelfLocationList").innerHTML += `
         <button class="shelf-add-location" type="button" data-new-location-for-shelf>
             + Nova localização em ${escapeHtml(shelf.codigo)}
@@ -101,7 +130,7 @@ function renderShelfDetail(data) {
             </div>
             <em>${produto.quantidade_atual}</em>
         </a>
-    `).join("") || `<div class="locations-empty">Nenhum produto armazenado nessa prateleira.</div>`;
+    `).join("") || `<div class="locations-empty ops-empty-state">Nenhum produto armazenado nessa prateleira.</div>`;
 
     const form = byId("shelfConfigForm");
     form.elements.id.value = shelf.id;
@@ -241,8 +270,8 @@ function openNewShelfConfig() {
         shelfMetric("Capacidade estimada", 4),
         shelfMetric("Espaços livres", 4),
     ].join("");
-    byId("shelfLocationList").innerHTML = `<div class="locations-empty">Cadastre a prateleira para vincular localizações.</div>`;
-    byId("shelfProductList").innerHTML = `<div class="locations-empty">Nenhum produto armazenado.</div>`;
+    byId("shelfLocationList").innerHTML = `<div class="locations-empty ops-empty-state">Cadastre a prateleira para vincular localizações.</div>`;
+    byId("shelfProductList").innerHTML = `<div class="locations-empty ops-empty-state">Nenhum produto armazenado.</div>`;
     const form = byId("shelfConfigForm");
     form.reset();
     form.elements.id.value = "";
@@ -323,7 +352,7 @@ function renderOperationalMap() {
                 <div><span>Ocupação</span><strong>${occupancy}%</strong></div>
             </div>
             <div class="shelf-grid">
-                ${shelves.map(renderShelf).join("") || `<div class="locations-empty">Nenhuma prateleira encontrada.</div>`}
+                ${shelves.map(renderShelf).join("") || `<div class="locations-empty ops-empty-state">Nenhuma prateleira encontrada.</div>`}
             </div>
         </article>
     `;
@@ -341,7 +370,7 @@ function renderFutureExpansion() {
                 <span>${escapeHtml(item.status)}</span>
             </div>
         </article>
-    `).join("") || `<div class="locations-empty">Nenhuma expansão encontrada.</div>`;
+    `).join("") || `<div class="locations-empty ops-empty-state">Nenhuma expansão encontrada.</div>`;
 }
 
 function renderAll() {
@@ -357,6 +386,7 @@ async function loadLocationMap() {
 
 (async function init() {
     await requireAuth();
+    renderLocationsLoading();
     newLocationModal = new bootstrap.Modal(byId("newLocationModal"));
     shelfDetailModal = new bootstrap.Modal(byId("shelfDetailModal"));
     moveLocationModal = new bootstrap.Modal(byId("moveLocationModal"));
