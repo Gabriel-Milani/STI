@@ -72,15 +72,6 @@ function renderEmpty() {
 }
 
 function renderLoading() {
-    byId("catalogMetrics").innerHTML = Array.from({ length: 4 }).map(() => `
-        <article class="catalog-metric ops-skeleton-card">
-            <span class="ops-skeleton-icon"></span>
-            <div class="w-100">
-                <span class="ops-skeleton-line short"></span>
-                <span class="ops-skeleton-line"></span>
-            </div>
-        </article>
-    `).join("");
     byId("productGrid").innerHTML = Array.from({ length: 6 }).map(() => `
         <article class="product-card product-card-loading ops-skeleton-card">
             <span class="ops-skeleton-line short"></span>
@@ -91,25 +82,6 @@ function renderLoading() {
     `).join("");
 }
 
-function renderMetrics() {
-    const metrics = [
-        { label: "Total de produtos", value: products.length, icon: "box" },
-        { label: "Estoque baixo", value: products.filter((p) => p.status === "baixo").length, icon: "warn" },
-        { label: "Localizações ativas", value: activeLocationsCount, icon: "pin" },
-    ];
-    byId("catalogMetrics").innerHTML = metrics.map((metric) => `
-        <article class="catalog-metric metric-${metric.icon}">
-            <div class="metric-pixel" aria-hidden="true">
-                ${pixelImg(`/assets/img/pixel-ops/metrics/${metric.icon}.webp`)}
-                <span></span>
-            </div>
-            <div>
-                <div class="metric-label">${escapeHtml(metric.label)}</div>
-                <div class="metric-value">${metric.value}</div>
-            </div>
-        </article>
-    `).join("") + `<div class="grid-ok-chip">${pixelImg("/assets/img/pixel-ops/ui/grid-ok.webp")}<span>GRID</span><strong>OK</strong></div>`;
-}
 
 function renderCard(produto) {
     const status = statusMeta(produto.status);
@@ -168,7 +140,6 @@ function renderCard(produto) {
 function renderProducts() {
     const visible = sortProducts(products.filter(productMatchesFilter));
     byId("productCount").textContent = visible.length;
-    renderMetrics();
     byId("productGrid").innerHTML = visible.length ? visible.map(renderCard).join("") : renderEmpty();
 }
 
