@@ -1,0 +1,46 @@
+:root {
+    color-scheme: dark;
+    --terminal-bg: #07131f;
+    --terminal-panel: #10233a;
+    --terminal-border: #1f4a66;
+    --terminal-text: #f4f8fb;
+    --terminal-muted: #8da4b5;
+    --terminal-accent: #36c5f0;
+    --terminal-success: #38d39f;
+    --terminal-danger: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--terminal-bg); color: var(--terminal-text); font-family: Inter, Segoe UI, Roboto, Arial, sans-serif; }
+body { display: flex; align-items: stretch; justify-content: stretch; }
+.terminal-layout { width: 100vw; height: 100vh; display: grid; grid-template-rows: auto 1fr auto; background: linear-gradient(135deg, rgba(7,19,31,1) 0%, rgba(16,35,58,1) 100%); }
+.terminal-header, .terminal-footer { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; background: rgba(3, 10, 18, 0.92); border-bottom: 1px solid var(--terminal-border); border-top: 1px solid var(--terminal-border); }
+.terminal-header { border-bottom: 1px solid var(--terminal-border); }
+.terminal-footer { border-top: 1px solid var(--terminal-border); font-size: 0.95rem; color: var(--terminal-muted); }
+.terminal-logo { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.24em; color: var(--terminal-accent); }
+.terminal-title { font-size: 0.95rem; color: var(--terminal-muted); text-transform: uppercase; letter-spacing: 0.16em; }
+.terminal-userbox { text-align: right; }
+.terminal-status { font-weight: 700; letter-spacing: 0.12em; font-size: 0.8rem; color: var(--terminal-success); }
+.terminal-camera { position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 1rem; }
+.scanner-viewport { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(7,19,31,0.7), rgba(7,19,31,0.95)); }
+.scanner-viewport video { width: 100%; height: 100%; object-fit: cover; }
+.terminal-state { position: relative; z-index: 2; text-align: center; max-width: 420px; padding: 1.25rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; background: rgba(8,16,24,0.8); backdrop-filter: blur(16px); }
+.terminal-icon { font-size: 3.1rem; margin-bottom: 0.75rem; }
+.terminal-state h1 { font-size: 1.4rem; margin: 0 0 0.4rem; }
+.terminal-state p { margin: 0; color: var(--terminal-muted); }
+.terminal-card { position: absolute; z-index: 3; inset: auto 1rem 4.5rem 1rem; padding: 1rem; border-radius: 24px; background: rgba(8,16,24,0.92); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 16px 40px rgba(0,0,0,0.25); }
+.terminal-card.hidden { display: none; }
+.terminal-card h2 { margin: 0 0 0.4rem; font-size: 1.1rem; }
+.terminal-card .label { color: var(--terminal-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.14em; }
+.terminal-card .value { font-size: 1rem; margin-top: 0.25rem; }
+.terminal-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+.terminal-actions button, .terminal-actions .btn { min-height: 3.2rem; border-radius: 14px; border: 0; background: var(--terminal-panel); color: var(--terminal-text); font-weight: 700; cursor: pointer; }
+.terminal-actions .btn-primary { background: var(--terminal-accent); color: #041018; }
+.terminal-actions .btn-success { background: var(--terminal-success); color: #041018; }
+.terminal-actions .btn-danger { background: var(--terminal-danger); color: #fff; }
+.terminal-loader { display: flex; align-items: center; gap: 0.65rem; color: var(--terminal-accent); font-weight: 700; }
+.terminal-toast { position: absolute; left: 50%; bottom: 4.5rem; transform: translateX(-50%); z-index: 12; padding: 0.85rem 1rem; border-radius: 999px; background: rgba(8,16,24,0.94); border: 1px solid rgba(255,255,255,0.12); color: var(--terminal-text); opacity: 0; pointer-events: none; transition: opacity 220ms ease; }
+.terminal-toast.show { opacity: 1; }
+.terminal-toast.success { border-color: rgba(56, 211, 159, 0.35); color: #8ff5cd; }
+.terminal-toast.error { border-color: rgba(255,107,107,0.4); color: #ffb6b6; }
+@media (max-width: 900px) { .terminal-actions { grid-template-columns: 1fr; } }

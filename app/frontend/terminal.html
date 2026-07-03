@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#07131f">
+    <title>STI Terminal</title>
+    <link rel="stylesheet" href="/assets/css/terminal.css">
+</head>
+<body class="terminal-body">
+    <div class="terminal-layout">
+        <header class="terminal-header">
+            <div>
+                <div class="terminal-logo">STI</div>
+                <div class="terminal-title">Terminal Operacional</div>
+            </div>
+            <div class="terminal-userbox">
+                <div id="terminalUserName">Usuário</div>
+                <div class="terminal-status online">● ONLINE</div>
+            </div>
+        </header>
+
+        <main class="terminal-camera" id="terminalMain">
+            <div id="scannerViewport" class="scanner-viewport"></div>
+            <div id="terminalState" class="terminal-state">
+                <div class="terminal-icon">📷</div>
+                <h1>Aguardando leitura...</h1>
+                <p>Posicione o QR do produto ou da localização.</p>
+            </div>
+            <div id="terminalCard" class="terminal-card hidden"></div>
+        </main>
+
+        <footer class="terminal-footer">
+            <div id="terminalTime">--:--</div>
+            <div id="terminalConnection">Conexão</div>
+            <div id="terminalVersion">v1.0.0</div>
+        </footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.0/html5-qrcode.min.js"></script>
+    <script src="/assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="/assets/js/terminal-api.js"></script>
+    <script src="/assets/js/terminal-scanner.js"></script>
+    <script src="/assets/js/terminal-ui.js"></script>
+    <script src="/assets/js/terminal.js"></script>
+</body>
+</html>

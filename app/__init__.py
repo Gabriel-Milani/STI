@@ -4,7 +4,7 @@ import os
 
 from .database import init_db
 from .logging_config import configure_logging
-from .services.auth_utils import csrf_protect
+from .services.auth_utils import csrf_protect, login_required
 from .routes.auth import auth_bp
 from .routes.localizacoes import localizacoes_bp
 from .routes.produtos import produtos_bp
@@ -15,6 +15,7 @@ from .routes.dashboard import dashboard_bp
 from .routes.etiquetas import etiquetas_bp
 from .routes.importacao import importacao_bp
 from .routes.usuarios import usuarios_bp
+from .routes.terminal import terminal_bp
 
 
 def env_bool(name, default=False):
@@ -60,6 +61,7 @@ def create_app():
     app.register_blueprint(etiquetas_bp, url_prefix="/api/etiquetas")
     app.register_blueprint(importacao_bp, url_prefix="/api/importacao")
     app.register_blueprint(usuarios_bp, url_prefix="/api/usuarios")
+    app.register_blueprint(terminal_bp, url_prefix="/api/terminal")
 
     @app.get("/api/health")
     def health():
@@ -88,6 +90,10 @@ def create_app():
             endpoint=f"page_{filename.replace('-', '_').replace('.', '_')}",
             view_func=lambda filename=filename: send_from_directory("frontend", filename),
         )
+
+    @app.get("/terminal")
+    def terminal_page():
+        return send_from_directory("frontend", "terminal.html")
 
     @app.get("/produtos/<codigo>")
     def produto_detalhe_page(codigo):

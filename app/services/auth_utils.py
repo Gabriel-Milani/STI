@@ -9,6 +9,10 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CSRF_EXEMPT_PATHS = {"/api/auth/login"}
 
 
+def csrf_exempt_path(path):
+    return path == "/api/terminal" or path.startswith("/api/terminal/")
+
+
 def current_user_id():
     return session.get("user_id")
 
@@ -28,7 +32,7 @@ def csrf_response_data():
 def csrf_protect():
     if request.method in SAFE_METHODS or not request.path.startswith("/api/"):
         return None
-    if request.path in CSRF_EXEMPT_PATHS:
+    if request.path in CSRF_EXEMPT_PATHS or csrf_exempt_path(request.path):
         return None
     expected = session.get("csrf_token")
     provided = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
