@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Etiquetas | Estoque TI</title>
+    <link href="/assets/vendor/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/styles.css" rel="stylesheet">
+</head>
+<body class="ops-app-page pixel-ops-page labels-page">
+<div class="container-fluid app-shell px-0">
+    <div class="row g-0 min-vh-100">
+        <aside class="sidebar pixel-sidebar">
+            <nav id="appNav" class="nav flex-column pixel-nav"></nav>
+        </aside>
+
+        <main class="pixel-main">
+            <div class="pixel-content">
+                <div id="alert"></div>
+
+                <section class="labels-toolbar no-print">
+                    <div class="labels-tabs" id="labelTabs">
+                        <button class="labels-tab active" type="button" data-label-tab="products">Etiquetas de Produtos</button>
+                        <button class="labels-tab" type="button" data-label-tab="locations">Etiquetas de Localizações</button>
+                    </div>
+                    <form id="filterForm" class="labels-filter-form">
+                        <label>
+                            <span>Busca</span>
+                            <input class="form-control" name="q" placeholder="Buscar por nome ou código">
+                        </label>
+                        <label>
+                            <span>Ordenar</span>
+                            <select class="form-select" name="sort">
+                                <option value="nome">Nome</option>
+                                <option value="codigo">Código</option>
+                            </select>
+                        </label>
+                        <button class="btn btn-outline-primary" type="submit">Filtrar</button>
+                        <button class="btn btn-primary" type="button" id="printBatch">Imprimir lote</button>
+                    </form>
+                </section>
+
+                <section id="productLabels" class="label-grid"></section>
+                <section id="locationLabels" class="label-grid d-none"></section>
+            </div>
+        </main>
+    </div>
+</div>
+<script src="/assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script src="/assets/js/api.js"></script>
+<script src="/assets/js/etiquetas.js"></script>
+</body>
+</html>
