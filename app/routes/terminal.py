@@ -13,18 +13,22 @@ def page():
 
 
 @terminal_bp.get("/status")
+@login_required
 def status():
     with get_db() as db:
         user = db.execute("SELECT nome, username, perfil FROM usuarios WHERE id = ?", (current_user_id(),)).fetchone()
+        users_list = db.execute("SELECT id, nome, username FROM usuarios WHERE ativo = 1 ORDER BY nome").fetchall()
         return api_ok({
             "online": True,
             "usuario_logado": row_to_dict(user),
+            "usuarios_ativos": [row_to_dict(u) for u in users_list],
             "scanner_ativo": True,
             "versao": "1.0.0",
         }, "Terminal pronto.")
 
 
 @terminal_bp.get("/scan/<codigo>")
+@login_required
 def scan(codigo):
     with get_db() as db:
         try:
@@ -42,6 +46,7 @@ def scan(codigo):
 
 
 @terminal_bp.post("/action")
+@login_required
 def action():
     data = request.get_json(silent=True) or {}
     with get_db() as db:

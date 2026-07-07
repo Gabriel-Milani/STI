@@ -25,12 +25,17 @@ class TerminalService:
         ).fetchone()
         if produto:
             loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (produto["localizacao_id"],)).fetchone()
+            emprestimo = db.execute(
+                "SELECT * FROM emprestimos WHERE produto_id = ? AND status = 'aberto' ORDER BY data_emprestimo DESC LIMIT 1",
+                (produto["id"],),
+            ).fetchone()
             return {
                 "tipo": "produto",
                 "produto": {
                     **dict(produto),
                     "localizacao": dict(loc) if loc else None,
                     "localizacao_label": location_label(loc),
+                    "emprestimo_ativo": dict(emprestimo) if emprestimo else None,
                 },
             }
 
@@ -72,12 +77,20 @@ class TerminalService:
         if not produto:
             raise TerminalOperationError("Produto não encontrado.", 404)
 
+        quantidade = int(data.get("quantidade") or 1)
+        if quantidade < 1:
+            raise TerminalOperationError("Quantidade inválida.", 400)
+
+        if action == "entrada":
+            observacao = (data.get("observacao") or "").strip()
+            return TerminalService._register_entrada(db, produto, quantidade, observacao, usuario_id, usuario_nome)
+
         if action == "retirar":
             destino = (data.get("usuario") or "").strip()
             observacao = (data.get("observacao") or "").strip()
             if not destino:
                 raise TerminalOperationError("Informe um usuário para retirada.", 400)
-            return TerminalService._register_retirada(db, produto, destino, observacao, usuario_id, usuario_nome)
+            return TerminalService._register_retirada(db, produto, destino, observacao, usuario_id, usuario_nome, quantidade)
 
         if action == "emprestar":
             destino = (data.get("usuario") or "").strip()
@@ -85,7 +98,7 @@ class TerminalService:
             observacao = (data.get("observacao") or "").strip()
             if not destino:
                 raise TerminalOperationError("Informe um usuário para empréstimo.", 400)
-            return TerminalService._register_emprestimo(db, produto, destino, data_prevista, observacao, usuario_id, usuario_nome)
+            return TerminalService._register_emprestimo(db, produto, destino, data_prevista, observacao, usuario_id, usuario_nome, quantidade)
 
         if action == "devolver":
             return TerminalService._register_devolucao(db, produto, data, usuario_id, usuario_nome)
@@ -102,31 +115,41 @@ class TerminalService:
         raise TerminalOperationError("Ação não suportada.", 400)
 
     @staticmethod
-    def _register_retirada(db, produto, destino, observacao, usuario_id, usuario_nome):
+    def _register_entrada(db, produto, quantidade, observacao, usuario_id, usuario_nome):
+        data = {
+            "responsavel_origem": usuario_nome or "Usuário logado",
+            "observacao": observacao,
+        }
+        _, mov_id, depois = register_product_movement(db, produto["id"], "entrada", quantidade, data)
+        audit(db, usuario_id, "entrada", "produto", produto["id"], f"{produto['codigo']}")
+        return {"status": "ok", "mensagem": f"Entrada de {quantidade} unidade(s) registrada.", "quantidade_atual": depois, "movimentacao_id": mov_id}
+
+    @staticmethod
+    def _register_retirada(db, produto, destino, observacao, usuario_id, usuario_nome, quantidade=1):
         data = {
             "entregue_por": usuario_nome or "Usuário logado",
             "entregue_para": destino,
             "observacao": observacao,
         }
-        _, mov_id, depois = register_product_movement(db, produto["id"], "retirada", 1, data)
+        _, mov_id, depois = register_product_movement(db, produto["id"], "retirada", quantidade, data)
         audit(db, usuario_id, "retirada", "produto", produto["id"], f"{produto['codigo']}")
-        return {"status": "ok", "mensagem": "Retirada registrada.", "quantidade_atual": depois, "movimentacao_id": mov_id}
+        return {"status": "ok", "mensagem": f"Retirada de {quantidade} unidade(s) registrada.", "quantidade_atual": depois, "movimentacao_id": mov_id}
 
     @staticmethod
-    def _register_emprestimo(db, produto, destino, data_prevista, observacao, usuario_id, usuario_nome):
+    def _register_emprestimo(db, produto, destino, data_prevista, observacao, usuario_id, usuario_nome, quantidade=1):
         data = {
             "entregue_por": usuario_nome or "Usuário logado",
             "emprestado_para": destino,
             "destino": data_prevista,
             "observacao": observacao,
         }
-        produto_row, mov_id, depois = register_product_movement(db, produto["id"], "emprestimo", 1, data)
+        produto_row, mov_id, depois = register_product_movement(db, produto["id"], "emprestimo", quantidade, data)
         db.execute(
             "INSERT INTO emprestimos (produto_id, quantidade, entregue_por, emprestado_para, destino, observacao, status, movimentacao_emprestimo_id) VALUES (?, ?, ?, ?, ?, ?, 'aberto', ?)",
-            (produto["id"], 1, data["entregue_por"], destino, data_prevista, observacao, mov_id),
+            (produto["id"], quantidade, data["entregue_por"], destino, data_prevista, observacao, mov_id),
         )
         audit(db, usuario_id, "emprestimo", "produto", produto["id"], f"{produto['codigo']}")
-        return {"status": "ok", "mensagem": "Empréstimo registrado.", "quantidade_atual": depois, "movimentacao_id": mov_id}
+        return {"status": "ok", "mensagem": f"Empréstimo de {quantidade} unidade(s) registrado.", "quantidade_atual": depois, "movimentacao_id": mov_id}
 
     @staticmethod
     def _register_devolucao(db, produto, data, usuario_id, usuario_nome):
