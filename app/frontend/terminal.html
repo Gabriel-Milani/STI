@@ -3,37 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#07131f">
+    <meta name="theme-color" content="#061626">
     <title>STI Terminal</title>
-    <link rel="stylesheet" href="/assets/css/terminal.css">
+    <link rel="stylesheet" href="/assets/css/terminal.css?v=terminal-20260714-9">
 </head>
 <body class="terminal-body">
     <div class="terminal-layout">
         <header class="terminal-header">
-            <div>
-                <div class="terminal-logo">STI</div>
-                <div class="terminal-title">Terminal Operacional</div>
+            <div class="terminal-brand">
+                <div class="terminal-logo">
+                    <img src="/assets/img/pixel-ops/ui/logo-monitor.webp" alt="">
+                </div>
+                <div>
+                    <div class="terminal-kicker">Terminal STI</div>
+                    <div class="terminal-title">Operação de estoque</div>
+                </div>
             </div>
             <div class="terminal-userbox">
                 <div id="terminalUserName">Usuário</div>
-                <div class="terminal-status online">● ONLINE</div>
+                <div class="terminal-status-row-mini">
+                    <span class="terminal-dot"></span>
+                    <span class="terminal-status online">ONLINE</span>
+                </div>
             </div>
         </header>
 
         <main class="terminal-camera" id="terminalMain">
             <div id="scannerViewport" class="scanner-viewport"></div>
+            <div class="terminal-scan-frame" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+            </div>
             <div id="terminalState" class="terminal-state">
                 <div class="terminal-icon">📷</div>
                 <h1>Aguardando leitura...</h1>
                 <p>Posicione o QR do produto ou da localização.</p>
             </div>
+            <form id="manualCodeForm" class="terminal-manual">
+                <input id="manualCodeInput" type="text" autocomplete="off" inputmode="text" placeholder="Digite ou use leitor USB">
+                <button type="submit">Buscar código</button>
+            </form>
             <div id="terminalCard" class="terminal-card hidden"></div>
         </main>
 
         <footer class="terminal-footer">
-            <div id="terminalTime">--:--</div>
-            <div id="terminalConnection">Conexão</div>
-            <div id="terminalVersion">v1.0.0</div>
+            <div class="terminal-footer-item">
+                <span>Hora</span>
+                <strong id="terminalTime">--:--</strong>
+            </div>
+            <div class="terminal-footer-item">
+                <span>Câmera</span>
+                <strong id="terminalConnection">Conexão</strong>
+            </div>
+            <div class="terminal-footer-item">
+                <span>Sistema</span>
+                <strong id="terminalVersion">v1.0.0</strong>
+            </div>
         </footer>
     </div>
 
@@ -41,11 +65,7 @@
     <audio id="soundSuccess" src="/assets/sounds/success.mp3" preload="auto"></audio>
     <audio id="soundError" src="/assets/sounds/error.mp3" preload="auto"></audio>
 
-    <script src="/assets/vendor/html5-qrcode.min.js"></script>
-    <script src="/assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
-    <script src="/assets/js/terminal-api.js"></script>
-    <script src="/assets/js/terminal-scanner.js"></script>
-    <script src="/assets/js/terminal-ui.js"></script>
-    <script src="/assets/js/terminal.js"></script>
+    <script src="/assets/vendor/html5-qrcode.min.js?v=terminal-20260714-9"></script>
+    <script src="/assets/js/terminal.js?v=terminal-20260714-9"></script>
 </body>
 </html>

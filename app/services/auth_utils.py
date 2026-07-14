@@ -7,10 +7,11 @@ from ..database import get_db
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 CSRF_EXEMPT_PATHS = {"/api/auth/login"}
+TERMINAL_API_PREFIX = "/api/terminal/"
 
 
 def csrf_exempt_path(path):
-    return path == "/api/terminal" or path.startswith("/api/terminal/")
+    return path.startswith(TERMINAL_API_PREFIX)
 
 
 def current_user_id():

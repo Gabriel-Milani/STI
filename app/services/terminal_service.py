@@ -1,6 +1,3 @@
-from datetime import datetime
-
-from ..database import get_db
 from ..services.helpers import audit, location_label, parse_int
 from ..services.stock_movements import StockError, register_product_movement
 
@@ -14,21 +11,53 @@ class TerminalOperationError(Exception):
 
 class TerminalService:
     @staticmethod
-    def resolve_scan(db, codigo, usuario_id):
-        token = (codigo or "").strip().upper()
-        if not token:
-            raise TerminalOperationError("QR inválido.", 400)
+    def _token(value):
+        return (value or "").strip().upper()
 
-        produto = db.execute(
+    @staticmethod
+    def _find_product(db, codigo):
+        token = TerminalService._token(codigo)
+        if not token:
+            return None
+        return db.execute(
             "SELECT * FROM produtos WHERE ativo = 1 AND (UPPER(codigo) = ? OR UPPER(codigo_barras) = ?)",
             (token, token),
         ).fetchone()
+
+    @staticmethod
+    def _find_location(db, codigo):
+        token = TerminalService._token(codigo)
+        if not token:
+            return None
+        return db.execute(
+            "SELECT * FROM localizacoes WHERE ativo = 1 AND (UPPER(codigo) = ? OR UPPER(nome) = ?)",
+            (token, token),
+        ).fetchone()
+
+    @staticmethod
+    def _active_loan(db, produto_id):
+        return db.execute(
+            "SELECT * FROM emprestimos WHERE produto_id = ? AND status = 'aberto' ORDER BY data_emprestimo DESC LIMIT 1",
+            (produto_id,),
+        ).fetchone()
+
+    @staticmethod
+    def _quantity(data):
+        value = data.get("quantidade")
+        if value in (None, ""):
+            return 1
+        return parse_int(value, 0)
+
+    @staticmethod
+    def resolve_scan(db, codigo):
+        token = TerminalService._token(codigo)
+        if not token:
+            raise TerminalOperationError("QR inválido.", 400)
+
+        produto = TerminalService._find_product(db, token)
         if produto:
             loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (produto["localizacao_id"],)).fetchone()
-            emprestimo = db.execute(
-                "SELECT * FROM emprestimos WHERE produto_id = ? AND status = 'aberto' ORDER BY data_emprestimo DESC LIMIT 1",
-                (produto["id"],),
-            ).fetchone()
+            emprestimo = TerminalService._active_loan(db, produto["id"])
             return {
                 "tipo": "produto",
                 "produto": {
@@ -39,10 +68,7 @@ class TerminalService:
                 },
             }
 
-        localizacao = db.execute(
-            "SELECT * FROM localizacoes WHERE ativo = 1 AND (UPPER(codigo) = ? OR UPPER(nome) = ?)",
-            (token, token),
-        ).fetchone()
+        localizacao = TerminalService._find_location(db, token)
         if localizacao:
             return {
                 "tipo": "localizacao",
@@ -68,16 +94,11 @@ class TerminalService:
         if not action:
             raise TerminalOperationError("Ação inválida.", 400)
 
-        produto = None
-        if codigo:
-            produto = db.execute(
-                "SELECT * FROM produtos WHERE ativo = 1 AND (UPPER(codigo) = ? OR UPPER(codigo_barras) = ?)",
-                (codigo.upper(), codigo.upper()),
-            ).fetchone()
+        produto = TerminalService._find_product(db, codigo)
         if not produto:
             raise TerminalOperationError("Produto não encontrado.", 404)
 
-        quantidade = int(data.get("quantidade") or 1)
+        quantidade = TerminalService._quantity(data)
         if quantidade < 1:
             raise TerminalOperationError("Quantidade inválida.", 400)
 
@@ -107,7 +128,7 @@ class TerminalService:
             destino = (data.get("destino") or "").strip()
             if not destino:
                 raise TerminalOperationError("Informe uma localização válida.", 400)
-            return TerminalService._register_mover(db, produto, destino, data, usuario_id, usuario_nome)
+            return TerminalService._register_mover(db, produto, destino, data, usuario_id)
 
         if action == "consultar":
             return TerminalService._build_consultation_payload(db, produto)
@@ -120,7 +141,7 @@ class TerminalService:
             "responsavel_origem": usuario_nome or "Usuário logado",
             "observacao": observacao,
         }
-        _, mov_id, depois = register_product_movement(db, produto["id"], "entrada", quantidade, data)
+        mov_id, depois = TerminalService._register_stock_movement(db, produto, "entrada", quantidade, data)
         audit(db, usuario_id, "entrada", "produto", produto["id"], f"{produto['codigo']}")
         return {"status": "ok", "mensagem": f"Entrada de {quantidade} unidade(s) registrada.", "quantidade_atual": depois, "movimentacao_id": mov_id}
 
@@ -131,7 +152,7 @@ class TerminalService:
             "entregue_para": destino,
             "observacao": observacao,
         }
-        _, mov_id, depois = register_product_movement(db, produto["id"], "retirada", quantidade, data)
+        mov_id, depois = TerminalService._register_stock_movement(db, produto, "retirada", quantidade, data)
         audit(db, usuario_id, "retirada", "produto", produto["id"], f"{produto['codigo']}")
         return {"status": "ok", "mensagem": f"Retirada de {quantidade} unidade(s) registrada.", "quantidade_atual": depois, "movimentacao_id": mov_id}
 
@@ -143,7 +164,7 @@ class TerminalService:
             "destino": data_prevista,
             "observacao": observacao,
         }
-        produto_row, mov_id, depois = register_product_movement(db, produto["id"], "emprestimo", quantidade, data)
+        mov_id, depois = TerminalService._register_stock_movement(db, produto, "emprestimo", quantidade, data)
         db.execute(
             "INSERT INTO emprestimos (produto_id, quantidade, entregue_por, emprestado_para, destino, observacao, status, movimentacao_emprestimo_id) VALUES (?, ?, ?, ?, ?, ?, 'aberto', ?)",
             (produto["id"], quantidade, data["entregue_por"], destino, data_prevista, observacao, mov_id),
@@ -153,13 +174,10 @@ class TerminalService:
 
     @staticmethod
     def _register_devolucao(db, produto, data, usuario_id, usuario_nome):
-        emp = db.execute(
-            "SELECT * FROM emprestimos WHERE produto_id = ? AND status = 'aberto' ORDER BY data_emprestimo DESC LIMIT 1",
-            (produto["id"],),
-        ).fetchone()
+        emp = TerminalService._active_loan(db, produto["id"])
         if not emp:
             raise TerminalOperationError("Nenhum empréstimo aberto para este item.", 400)
-        qtd = 1
+        qtd = emp["quantidade"]
         antes = produto["quantidade_atual"]
         depois = antes + qtd
         db.execute("UPDATE produtos SET quantidade_atual = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", (depois, produto["id"]))
@@ -169,11 +187,11 @@ class TerminalService:
         )
         db.execute("UPDATE emprestimos SET status='devolvido', data_devolucao=CURRENT_TIMESTAMP, recebido_por=?, movimentacao_devolucao_id=? WHERE id=?", (usuario_nome or "Usuário logado", cur.lastrowid, emp["id"]))
         audit(db, usuario_id, "devolucao", "produto", produto["id"], f"{produto['codigo']}")
-        return {"status": "ok", "mensagem": "Devolução registrada.", "quantidade_atual": depois, "movimentacao_id": cur.lastrowid}
+        return {"status": "ok", "mensagem": f"Devolução de {qtd} unidade(s) registrada.", "quantidade_atual": depois, "movimentacao_id": cur.lastrowid}
 
     @staticmethod
-    def _register_mover(db, produto, destino, data, usuario_id, usuario_nome):
-        localizacao = db.execute("SELECT * FROM localizacoes WHERE ativo = 1 AND (UPPER(codigo) = ? OR UPPER(nome) = ?)", (destino.upper(), destino.upper())).fetchone()
+    def _register_mover(db, produto, destino, data, usuario_id):
+        localizacao = TerminalService._find_location(db, destino)
         if not localizacao:
             raise TerminalOperationError("Localização inválida.", 400)
         origem_id = produto["localizacao_id"]
@@ -191,9 +209,48 @@ class TerminalService:
     def _build_consultation_payload(db, produto):
         loc = db.execute("SELECT * FROM localizacoes WHERE id = ?", (produto["localizacao_id"],)).fetchone()
         movs = db.execute(
-            "SELECT tipo, quantidade, observacao, data_hora FROM movimentacoes WHERE produto_id = ? ORDER BY data_hora DESC LIMIT 5",
+            """
+            SELECT
+                m.tipo,
+                m.quantidade,
+                m.quantidade_antes,
+                m.quantidade_depois,
+                m.responsavel_origem,
+                m.responsavel_destino,
+                m.destino,
+                m.observacao,
+                m.data_hora,
+                lo.codigo AS localizacao_origem_codigo,
+                lo.nome AS localizacao_origem_nome,
+                lo.armario AS localizacao_origem_armario,
+                lo.prateleira AS localizacao_origem_prateleira,
+                ld.codigo AS localizacao_destino_codigo,
+                ld.nome AS localizacao_destino_nome,
+                ld.armario AS localizacao_destino_armario,
+                ld.prateleira AS localizacao_destino_prateleira
+            FROM movimentacoes m
+            LEFT JOIN localizacoes lo ON lo.id = m.localizacao_origem_id
+            LEFT JOIN localizacoes ld ON ld.id = m.localizacao_destino_id
+            WHERE m.produto_id = ?
+            ORDER BY m.data_hora DESC
+            LIMIT 8
+            """,
             (produto["id"],),
         ).fetchall()
+        historico = []
+        for item in movs:
+            data = dict(item)
+            data["localizacao_origem_label"] = location_label({
+                "nome": data["localizacao_origem_nome"],
+                "armario": data["localizacao_origem_armario"],
+                "prateleira": data["localizacao_origem_prateleira"],
+            }) if data["localizacao_origem_nome"] else None
+            data["localizacao_destino_label"] = location_label({
+                "nome": data["localizacao_destino_nome"],
+                "armario": data["localizacao_destino_armario"],
+                "prateleira": data["localizacao_destino_prateleira"],
+            }) if data["localizacao_destino_nome"] else None
+            historico.append(data)
         return {
             "status": "ok",
             "mensagem": "Consulta realizada.",
@@ -202,5 +259,13 @@ class TerminalService:
                 "localizacao": dict(loc) if loc else None,
                 "localizacao_label": location_label(loc),
             },
-            "historico": [dict(item) for item in movs],
+            "historico": historico,
         }
+
+    @staticmethod
+    def _register_stock_movement(db, produto, tipo, quantidade, data):
+        try:
+            _, mov_id, depois = register_product_movement(db, produto["id"], tipo, quantidade, data)
+            return mov_id, depois
+        except StockError as error:
+            raise TerminalOperationError(error.message, error.status) from error

@@ -32,9 +32,39 @@ def check_config(_args):
     return 0
 
 
+def run_dev(_args):
+    load_dotenv()
+    app = create_app()
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host=host, port=port, debug=os.getenv("FLASK_ENV") == "development")
+    return 0
+
+
+def run_waitress(_args):
+    try:
+        from waitress import serve
+    except ImportError as exc:
+        raise SystemExit("Waitress não instalado. Rode: pip install -r requirements.txt") from exc
+
+    load_dotenv()
+    app = create_app()
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "5000"))
+    threads = int(os.getenv("WAITRESS_THREADS", "8"))
+    serve(app, host=host, port=port, threads=threads)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comandos operacionais do Estoque TI.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run_parser = subparsers.add_parser("run", help="Executa o servidor Flask local.")
+    run_parser.set_defaults(func=run_dev)
+
+    serve_parser = subparsers.add_parser("serve", help="Executa o servidor com Waitress.")
+    serve_parser.set_defaults(func=run_waitress)
 
     backup_parser = subparsers.add_parser("backup-db", help="Cria backup manual do banco SQLite.")
     backup_parser.set_defaults(func=backup_db)

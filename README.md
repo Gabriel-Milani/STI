@@ -1,19 +1,28 @@
-# Estoque TI V2 — Backend Flask
+# Estoque TI V2
 
-Backend objetivo para almoxarifado de TI com produtos por quantidade.
+Sistema Flask para controle de almoxarifado de TI, com cadastro de produtos, localizações físicas, movimentações, empréstimos, etiquetas, importação e terminal de tablet para operações rápidas no estoque.
 
-## Escopo
+## Visão Geral
 
-- Produtos por quantidade
-- Localização guiada: Armário → Prateleira → Localização
-- Entrada
-- Retirada
-- Empréstimo
-- Devolução
-- Descarte
-- Scanner por código interno ou código de barras do produto
-- Importação Excel simples
-- Dashboard com estoque crítico e últimas movimentações
+- Produtos controlados por quantidade.
+- Localizações em estrutura de armário, prateleira e posição.
+- Movimentações de entrada, retirada, empréstimo, devolução, descarte e mudança de localização.
+- Scanner por código interno, código de barras ou QR.
+- Terminal operacional em `/terminal`, pensado para tablet fixo no armário.
+- Dashboard com estoque crítico, movimentações recentes e resumo por localização.
+- Importação de produtos via planilha.
+- Autenticação, CSRF nas APIs administrativas e sessão segura configurável.
+
+## Estrutura
+
+```text
+app/
+  routes/              Rotas HTTP da API
+  services/            Regras de negócio reutilizáveis
+  frontend/            Telas HTML e assets estáticos
+  database.py          Schema, conexão e dados iniciais
+manage.py              Comandos operacionais e execução do servidor
+```
 
 ## Instalação
 
@@ -22,71 +31,106 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
-python run.py
+python manage.py run
 ```
 
-Antes de usar em produção, troque `SECRET_KEY`, defina `ADMIN_INITIAL_PASSWORD`
-com uma senha forte e use `SESSION_COOKIE_SECURE=1` se o sistema estiver em HTTPS.
+Antes de usar fora do ambiente local:
 
-## Operação
+- Defina uma `SECRET_KEY` forte.
+- Defina `ADMIN_INITIAL_PASSWORD` com uma senha segura.
+- Use `SESSION_COOKIE_SECURE=1` quando estiver rodando em HTTPS.
+- Use `.env.example` como base única para local e produção.
 
-Para validar a configuração efetiva:
-
-```bash
-python manage.py check-config
-```
-
-Para criar um backup manual do banco:
-
-```bash
-python manage.py backup-db
-```
-
-Em produção no Windows, prefira rodar com Waitress:
-
-```bash
-python serve.py
-```
-
-Use `.env.production.example` como base para o ambiente de produção.
-
-## Testes
-
-```bash
-python test_flow.py
-```
-
-Para rodar com pytest:
-
-```bash
-pip install -r requirements-dev.txt
-python -m pytest -q
-```
-
-## Primeiro login
+## Primeiro Acesso
 
 ```text
 Usuário: admin
-Senha: valor de ADMIN_INITIAL_PASSWORD no .env
+Senha: valor configurado em ADMIN_INITIAL_PASSWORD
 ```
 
-Troque essa senha antes de usar de verdade.
+Troque a senha inicial antes de operar o estoque de verdade.
 
-## Fluxo certo
+## Telas
 
-1. Fazer login
-2. Listar localizações: `GET /api/localizacoes`
-3. Cadastrar produto: `POST /api/produtos`
-4. Abrir produto: `GET /api/produtos/<codigo>`
-5. Movimentar produto:
-   - `POST /api/movimentacoes/entrada`
-   - `POST /api/movimentacoes/retirada`
-   - `POST /api/movimentacoes/emprestimo`
-   - `POST /api/emprestimos/<id>/devolver`
-   - `POST /api/movimentacoes/descarte`
-6. Mover produto: `POST /api/produtos/<id>/mover`
+| Rota | Uso |
+| --- | --- |
+| `/login` | Autenticação |
+| `/dashboard` | Visão geral do estoque |
+| `/produtos` | Listagem de produtos |
+| `/produtos/novo` | Cadastro de produto |
+| `/produtos/<codigo>` | Detalhe e movimentação do produto |
+| `/localizacoes` | Gestão de armários, prateleiras e posições |
+| `/movimentacoes` | Histórico de movimentações |
+| `/emprestimos` | Controle de empréstimos em aberto |
+| `/scanner` | Scanner geral |
+| `/terminal` | Terminal de tablet para operação no armário |
+| `/etiquetas` | Geração de etiquetas |
+| `/importacao` | Importação de planilha |
+| `/usuarios` | Gestão de usuários |
 
-## Exemplo de cadastro de mouse
+## Terminal de Tablet
+
+O terminal fica em `/terminal` e consome apenas as rotas de `/api/terminal`.
+
+Fluxos disponíveis:
+
+- Ler produto e registrar entrada.
+- Ler produto e registrar retirada.
+- Ler produto e registrar empréstimo.
+- Devolver item emprestado.
+- Consultar dados e últimas movimentações.
+- Mover produto escaneando a nova localização.
+
+Observações:
+
+- A câmera do navegador exige HTTPS ou `localhost`.
+- A página tenta entrar em tela cheia e travar orientação retrato após o primeiro toque.
+- Os endpoints do terminal exigem usuário autenticado.
+
+## API Principal
+
+Todas as respostas seguem o formato:
+
+```json
+{
+  "ok": true,
+  "data": {}
+}
+```
+
+Em erro:
+
+```json
+{
+  "ok": false,
+  "error": "Mensagem do erro."
+}
+```
+
+Rotas mais usadas:
+
+| Método | Rota | Uso |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | Login |
+| `POST` | `/api/auth/logout` | Logout |
+| `GET` | `/api/produtos` | Listar produtos |
+| `POST` | `/api/produtos` | Cadastrar produto |
+| `GET` | `/api/produtos/<id>` | Detalhar produto |
+| `PUT` | `/api/produtos/<id>` | Atualizar produto |
+| `POST` | `/api/produtos/<id>/mover` | Mover localização |
+| `GET` | `/api/localizacoes` | Listar localizações |
+| `POST` | `/api/movimentacoes/entrada` | Registrar entrada |
+| `POST` | `/api/movimentacoes/retirada` | Registrar retirada |
+| `POST` | `/api/movimentacoes/emprestimo` | Registrar empréstimo |
+| `POST` | `/api/movimentacoes/descarte` | Registrar descarte |
+| `POST` | `/api/emprestimos/<id>/devolver` | Registrar devolução |
+| `GET` | `/api/terminal/status` | Status do terminal |
+| `GET` | `/api/terminal/scan/<codigo>` | Resolver QR/código |
+| `POST` | `/api/terminal/action` | Executar ação do terminal |
+
+## Exemplos
+
+Cadastro de produto:
 
 ```json
 POST /api/produtos
@@ -102,7 +146,7 @@ POST /api/produtos
 }
 ```
 
-## Exemplo de retirada
+Retirada:
 
 ```json
 POST /api/movimentacoes/retirada
@@ -116,41 +160,52 @@ POST /api/movimentacoes/retirada
 }
 ```
 
-## Exemplo de empréstimo
+Ação no terminal:
 
 ```json
-POST /api/movimentacoes/emprestimo
+POST /api/terminal/action
 {
-  "produto_id": 1,
+  "action": "retirar",
+  "codigo": "P00001",
   "quantidade": 1,
-  "entregue_por": "Luis",
-  "emprestado_para": "Maria",
-  "destino": "Suporte",
-  "observacao": "Uso temporário"
+  "usuario": "Maria Silva",
+  "observacao": "Entrega no balcão"
 }
 ```
 
-## Exemplo de devolução
+Mover produto pelo terminal:
 
 ```json
-POST /api/emprestimos/1/devolver
+POST /api/terminal/action
 {
-  "recebido_por": "Luis",
-  "observacao": "Devolvido sem avarias"
-}
-```
-
-## Exemplo de mover localização
-
-```json
-POST /api/produtos/1/mover
-{
-  "localizacao_codigo": "ARM01-P4-ADAPTADORES",
+  "action": "mover",
+  "codigo": "P00001",
+  "destino": "ARM01-P4-MOUSE",
   "observacao": "Reorganização da prateleira"
 }
 ```
 
-## Localizações padrão
+## Operação
+
+Validar configuração efetiva:
+
+```bash
+python manage.py check-config
+```
+
+Criar backup manual do banco:
+
+```bash
+python manage.py backup-db
+```
+
+Rodar em produção no Windows com Waitress:
+
+```bash
+python manage.py serve
+```
+
+## Localizações Padrão
 
 - ARM01-P1-LIMPEZA
 - ARM01-P1-LEITORES
@@ -169,11 +224,3 @@ POST /api/produtos/1/mover
 - ARM01-P6-TECLADOS
 - ARM01-P6-CABOS
 - ARM01-P6-IMPRESSORA
-
-## Observação
-
-Este backend foi feito para ser simples de consumir por um frontend separado. O frontend deve esconder códigos técnicos e mostrar localização amigável, por exemplo:
-
-```text
-Armário 01 > P4 > Mouses
-```

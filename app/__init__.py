@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, redirect, send_from_directory
+from flask import Flask, jsonify, make_response, redirect, send_from_directory
 from dotenv import load_dotenv
 import os
 
@@ -93,7 +93,9 @@ def create_app():
 
     @app.get("/terminal")
     def terminal_page():
-        return send_from_directory("frontend", "terminal.html")
+        response = make_response(send_from_directory("frontend", "terminal.html"))
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return response
 
     @app.get("/produtos/<codigo>")
     def produto_detalhe_page(codigo):

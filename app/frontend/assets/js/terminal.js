@@ -1,154 +1,263 @@
-(() => {
-    const state = {
-        currentItem: null, // Scanned item response data
-        pendingAction: null, // "retirar", "emprestar", "devolver", "mover", "entrada"
-        activeUsers: [], // Active users list for dropdowns
-        waitingForLocationScan: false, // Flag for Mover flow
-        newLocation: null // Target location for Mover flow
+(function () {
+    const SELECTORS = {
+        scanner: "scannerViewport",
+        state: "terminalState",
+        card: "terminalCard",
+        userName: "terminalUserName",
+        time: "terminalTime",
+        connection: "terminalConnection",
+        version: "terminalVersion",
+        manualForm: "manualCodeForm",
+        manualInput: "manualCodeInput",
     };
 
-    // Helper functions to play sound alerts
-    function playSound(type) {
-        const audio = document.getElementById(`sound${type.charAt(0).toUpperCase() + type.slice(1)}`);
-        if (audio) {
-            audio.currentTime = 0;
-            audio.play().catch(err => console.warn("Audio play prevented:", err));
-        }
-    }
+    const ACTIONS = {
+        entrada: {
+            title: "Entrada no estoque",
+            state: "Adicionar unidades",
+            submit: "Registrar entrada",
+            requiresUser: false,
+            quantityMode: "open",
+            tone: "success",
+        },
+        retirar: {
+            title: "Retirada",
+            state: "Registrar retirada",
+            submit: "Confirmar retirada",
+            userLabel: "Entregue para",
+            quantityMode: "stock",
+            tone: "danger",
+        },
+        emprestar: {
+            title: "Empréstimo",
+            state: "Registrar empréstimo",
+            submit: "Confirmar empréstimo",
+            userLabel: "Emprestado para",
+            quantityMode: "stock",
+            hasReturnDate: true,
+            tone: "primary",
+        },
+    };
 
-function updateClock() {
-    const time = document.getElementById("terminalTime");
-    if (time) {
-        // Formata a hora diretamente no fuso de São Paulo
-        const formatoBrasilia = new Intl.DateTimeFormat("pt-BR", {
-            timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit"
-        });
-        
-        time.textContent = formatoBrasilia.format(new Date());
-    }
-}
-setInterval(updateClock, 1000);
+    const MOVEMENT_LABELS = {
+        entrada: "Entrada",
+        retirada: "Retirada",
+        emprestimo: "Empréstimo",
+        devolucao: "Devolução",
+        descarte: "Descarte",
+        mover: "Movido",
+    };
 
-    function initFullscreen() {
-        if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(() => {});
-        }
-        if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock("portrait").catch(() => {});
-        }
-    }
+    const state = {
+        currentItem: null,
+        activeUsers: [],
+        pendingAction: null,
+        selectedUser: "",
+        waitingForLocationScan: false,
+        waitingForUserScan: false,
+        targetLocation: null,
+        isSubmitting: false,
+        scannerStarting: false,
+    };
 
-    // Lock fullscreen and orientation on first user interaction
-    document.addEventListener("click", () => {
-        initFullscreen();
-    }, { once: true });
+    const dom = {
+        byId(id) {
+            return document.getElementById(id);
+        },
+        setText(id, value) {
+            const element = this.byId(id);
+            if (element) element.textContent = value;
+        },
+    };
 
-    async function startScanner() {
+    async function ignoreAsyncError(result) {
         try {
-            await TerminalScanner.start({
-                targetId: "scannerViewport",
-                onDecode: async (code) => {
-                    // Pause/stop scanner upon reading code
-                    await TerminalScanner.stop();
-                    playSound("scan");
+            if (result && typeof result.then === "function") {
+                await result;
+            }
+        } catch (_error) {}
+    }
 
-                    if (state.waitingForLocationScan) {
-                        await handleLocationScanForMove(code);
+    function read(obj, path, fallback = undefined) {
+        let value = obj;
+        for (const key of path) {
+            if (value == null) return fallback;
+            value = value[key];
+        }
+        return value == null ? fallback : value;
+    }
+
+    const ui = {
+        setState(title, detail, icon = "📷", tone = "default") {
+            const element = dom.byId(SELECTORS.state);
+            if (!element) return;
+            element.dataset.tone = tone;
+            document.body.dataset.tone = tone;
+            element.innerHTML = `<div class="terminal-icon">${icon}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail)}</p>`;
+        },
+        showCard(content, tone = "default") {
+            const card = dom.byId(SELECTORS.card);
+            if (!card) return;
+            card.dataset.tone = tone;
+            card.innerHTML = content;
+            card.classList.remove("hidden");
+            requestAnimationFrame(() => card.classList.add("show"));
+        },
+        hideCard() {
+            const card = dom.byId(SELECTORS.card);
+            if (!card) return;
+            card.classList.remove("show");
+            card.classList.add("hidden");
+            card.innerHTML = "";
+        },
+        loader(message = "Processando...") {
+            this.setState("Processando", message, "⏳", "loading");
+        },
+        toast(message, type = "success") {
+            const existing = document.querySelector(".terminal-toast");
+            if (existing) existing.remove();
+            const toast = document.createElement("div");
+            toast.className = `terminal-toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add("show"));
+            setTimeout(() => {
+                toast.classList.remove("show");
+                setTimeout(() => toast.remove(), 220);
+            }, 2400);
+        },
+        feedback(message, type = "error") {
+            const element = document.querySelector("[data-terminal-feedback]");
+            if (!element) return;
+            element.className = `terminal-feedback ${type}`;
+            element.textContent = message;
+            element.hidden = false;
+        },
+    };
+
+    const api = {
+        async request(path, options = {}) {
+            const init = {
+                credentials: "same-origin",
+                headers: {},
+                ...options,
+            };
+            if (init.body && !(init.body instanceof FormData)) {
+                init.headers["Content-Type"] = init.headers["Content-Type"] || "application/json";
+            }
+
+            const response = await fetch(path, init);
+            let payload;
+            try {
+                payload = await response.json();
+            } catch (_error) {
+                payload = { ok: false, error: "Resposta inválida do servidor." };
+            }
+            if (!response.ok || !payload.ok) {
+                const error = new Error(payload.error || "Operação não concluída.");
+                error.status = response.status;
+                throw error;
+            }
+            return payload;
+        },
+        status() {
+            return this.request("/api/terminal/status");
+        },
+        scan(code) {
+            return this.request(`/api/terminal/scan/${encodeURIComponent(code)}`);
+        },
+        action(payload) {
+            return this.request("/api/terminal/action", { method: "POST", body: JSON.stringify(payload) });
+        },
+    };
+
+    const scanner = {
+        instance: null,
+        active: false,
+        scanSize() {
+            const viewport = dom.byId(SELECTORS.scanner);
+            const rect = viewport ? viewport.getBoundingClientRect() : null;
+            const base = rect ? Math.min(rect.width, rect.height) : Math.min(window.innerWidth, window.innerHeight);
+            const size = Math.max(220, Math.min(420, Math.floor(base)));
+            document.documentElement.style.setProperty("--scan-size", `${size}px`);
+            return size;
+        },
+        async startWithConfig(cameraConfig, onDecode) {
+            const size = this.scanSize();
+            await this.instance.start(
+                cameraConfig,
+                {
+                    fps: 10,
+                    qrbox: { width: size, height: size },
+                    aspectRatio: 1,
+                    disableFlip: false,
+                },
+                async (decodedText) => {
+                    await this.stop();
+                    onDecode(decodedText);
+                },
+                () => {}
+            );
+        },
+        async start(onDecode) {
+            if (state.scannerStarting || this.active) return;
+            if (!dom.byId(SELECTORS.scanner)) return;
+            if (!window.Html5Qrcode) throw new Error("Biblioteca de scanner indisponível.");
+
+            state.scannerStarting = true;
+            try {
+                await this.resetInstance();
+                try {
+                    await this.startWithConfig({
+                        facingMode: "environment",
+                    }, onDecode);
+                } catch (_error) {
+                    await this.resetInstance();
+                    let cameras = [];
+                    try {
+                        if (typeof window.Html5Qrcode.getCameras === "function") {
+                            const cameraResult = window.Html5Qrcode.getCameras();
+                            cameras = cameraResult && typeof cameraResult.then === "function" ? await cameraResult : [];
+                        }
+                    } catch (_cameraError) {
+                        cameras = [];
+                    }
+                    const fallbackCamera = cameras.length ? cameras[cameras.length - 1] : null;
+                    const fallback = fallbackCamera ? fallbackCamera.id : "";
+                    if (!fallback) {
+                        await this.startWithConfig({ facingMode: "environment" }, onDecode);
                     } else {
-                        await handleStandardScan(code);
+                        await this.startWithConfig(fallback, onDecode);
                     }
                 }
-            });
-        } catch (error) {
-            TerminalUI.showToast(error.message || "Não foi possível iniciar a câmera", "error");
-            playSound("error");
-        }
-    }
-
-    // Handles the second scan in the move flow (scanning target location)
-    async function handleLocationScanForMove(code) {
-        TerminalUI.showLoader("Validando localização...");
-        try {
-            const response = await TerminalApi.scan(code);
-            if (response.data?.tipo === "localizacao") {
-                state.newLocation = response.data.localizacao;
-                playSound("success");
-                renderMoverConfirmation();
-            } else {
-                throw new Error("O código escaneado não é uma localização válida.");
+                this.active = true;
+            } finally {
+                state.scannerStarting = false;
             }
-        } catch (error) {
-            TerminalUI.showToast(error.message || "Localização inválida", "error");
-            playSound("error");
-            // Revert state and show the product card again
-            state.waitingForLocationScan = false;
-            state.newLocation = null;
-            if (state.currentItem && state.currentItem.tipo === "produto") {
-                renderProductCard(state.currentItem.produto);
-            } else {
-                resetToIdle();
+        },
+        async resetInstance() {
+            if (this.instance) {
+                await this.stop();
+                if (typeof this.instance.clear === "function") {
+                    await ignoreAsyncError(this.instance.clear());
+                }
             }
-        }
-    }
-
-    // Handles standard scans (products, locations, users)
-    async function handleStandardScan(code) {
-        TerminalUI.showLoader("Buscando...");
-        try {
-            const response = await TerminalApi.scan(code);
-            state.currentItem = response.data;
-
-            if (response.data?.tipo === "produto") {
-                playSound("success");
-                renderProductCard(response.data.produto);
-            } else if (response.data?.tipo === "localizacao") {
-                playSound("success");
-                renderLocationCard(response.data.localizacao);
-            } else if (response.data?.tipo === "usuario") {
-                playSound("success");
-                renderUserCard(response.data.usuario);
-            } else {
-                throw new Error("Tipo de item não identificado.");
+            const viewport = dom.byId(SELECTORS.scanner);
+            if (viewport) viewport.innerHTML = "";
+            this.instance = new window.Html5Qrcode(SELECTORS.scanner);
+        },
+        async stop() {
+            if (!this.instance || !this.active) return;
+            this.active = false;
+            await ignoreAsyncError(this.instance.stop());
+            if (typeof this.instance.clear === "function") {
+                await ignoreAsyncError(this.instance.clear());
             }
-        } catch (error) {
-            TerminalUI.showToast(error.message || "Código não encontrado", "error");
-            playSound("error");
-            resetToIdleDelayed(2500);
-        }
-    }
+        },
+    };
 
-    function resetToIdle() {
-        state.currentItem = null;
-        state.pendingAction = null;
-        state.waitingForLocationScan = false;
-        state.newLocation = null;
-        TerminalUI.hideCard();
-        TerminalUI.setState("Aguardando leitura", "Posicione o QR do produto ou da localização.", "📷");
-        startScanner().catch(() => {});
-    }
-
-    function resetToIdleDelayed(delayMs) {
-        TerminalUI.hideCard();
-        setTimeout(() => {
-            resetToIdle();
-        }, delayMs);
-    }
-
-    function buildUserSelectHTML(selectId) {
-        if (!state.activeUsers || state.activeUsers.length === 0) {
-            return `<input id="${selectId}" type="text" placeholder="Nome do responsável" required class="terminal-input">`;
-        }
-        const options = state.activeUsers.map(user => 
-            `<option value="${user.nome || user.username}">${escapeHTML(user.nome || user.username)}</option>`
-        ).join("");
-        return `<select id="${selectId}" class="terminal-select" required>
-            <option value="" disabled selected>Selecione o responsável...</option>
-            ${options}
-        </select>`;
-    }
-
-    function escapeHTML(str) {
-        return String(str || "")
+    function escapeHtml(value) {
+        return String(value == null ? "" : value)
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -156,516 +265,658 @@ setInterval(updateClock, 1000);
             .replace(/'/g, "&#039;");
     }
 
-    // Build the quantity stepper widget HTML
-    function buildQtyStepper(defaultQty, maxQty) {
-        const max = maxQty > 0 ? maxQty : 999;
-        return `
-            <div class="form-group">
-                <span class="qty-label">Quantidade</span>
-                <div class="qty-stepper" data-max="${max}">
-                    <button type="button" class="qty-btn qty-minus">−</button>
-                    <div class="qty-display" id="qtyDisplay">${defaultQty}</div>
-                    <button type="button" class="qty-btn qty-plus">+</button>
-                </div>
-                <input type="hidden" id="terminalActionQty" value="${defaultQty}">
-            </div>
-        `;
+    function playSound(type) {
+        const audio = dom.byId(`sound${type.charAt(0).toUpperCase()}${type.slice(1)}`);
+        if (!audio) return;
+        audio.currentTime = 0;
+        ignoreAsyncError(audio.play());
     }
 
-    // Attach qty stepper event listeners
-    function attachQtyStepperListeners() {
-        const wrapper = document.querySelector(".qty-stepper");
-        if (!wrapper) return;
+    function vibrate(pattern = [18]) {
+        if (navigator.vibrate) navigator.vibrate(pattern);
+    }
 
-        const display = document.getElementById("qtyDisplay");
-        const hiddenInput = document.getElementById("terminalActionQty");
-        const max = parseInt(wrapper.dataset.max, 10) || 999;
+    function runOptionalAsync(fn) {
+        if (typeof fn !== "function") return;
+        try {
+            ignoreAsyncError(fn());
+        } catch (_error) {}
+    }
 
-        wrapper.querySelector(".qty-minus").addEventListener("click", () => {
-            let val = parseInt(hiddenInput.value, 10) || 1;
-            if (val > 1) {
-                val--;
-                hiddenInput.value = val;
-                display.textContent = val;
-            }
+    function updateClock() {
+        const formatter = new Intl.DateTimeFormat("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+            hour: "2-digit",
+            minute: "2-digit",
         });
+        dom.setText(SELECTORS.time, formatter.format(new Date()));
+    }
 
-        wrapper.querySelector(".qty-plus").addEventListener("click", () => {
-            let val = parseInt(hiddenInput.value, 10) || 1;
-            if (val < max) {
-                val++;
-                hiddenInput.value = val;
-                display.textContent = val;
+    function initTabletMode() {
+        document.addEventListener("click", () => {
+            runOptionalAsync(() => {
+                if (document.documentElement.requestFullscreen) return document.documentElement.requestFullscreen();
+            });
+            runOptionalAsync(() => {
+                if (window.screen && screen.orientation && screen.orientation.lock) {
+                    return screen.orientation.lock("portrait");
+                }
+            });
+        }, { once: true });
+    }
+
+    async function startScanner() {
+        try {
+            await scanner.start(handleScan);
+        } catch (error) {
+            ui.toast(error.message || "Não foi possível iniciar a câmera", "error");
+            ui.setState("Câmera indisponível", "Verifique a permissão da câmera e tente novamente.", "📷", "error");
+            playSound("error");
+            vibrate([80, 30, 80]);
+        }
+    }
+
+    async function handleScan(code) {
+        code = String(code || "").trim();
+        if (!code) return;
+        playSound("scan");
+        if (state.waitingForLocationScan) {
+            await handleLocationScan(code);
+            return;
+        }
+        if (state.waitingForUserScan) {
+            await handleUserScan(code);
+            return;
+        }
+        await handleLookupScan(code);
+    }
+
+    async function handleLookupScan(code) {
+        ui.loader("Lendo QR...");
+        try {
+            const response = await api.scan(code);
+            state.currentItem = response.data;
+            state.selectedUser = "";
+            playSound("success");
+            vibrate([18, 10, 18]);
+
+            const tipo = read(response, ["data", "tipo"], "");
+            if (tipo === "produto") renderProductCard(response.data.produto);
+            else if (tipo === "localizacao") renderLocationCard(response.data.localizacao);
+            else if (tipo === "usuario") renderUserCard(response.data.usuario);
+            else throw new Error("Tipo de item não identificado.");
+        } catch (error) {
+            playSound("error");
+            vibrate([70, 25, 70]);
+            ui.toast(error.message || "Falha ao localizar item", "error");
+            ui.setState("Leitura não identificada", "Tente novamente ou verifique o código.", "⚠️", "error");
+            setTimeout(resetTerminal, 1800);
+        }
+    }
+
+    async function handleUserScan(code) {
+        ui.loader("Validando usuário...");
+        try {
+            const response = await api.scan(code);
+            if (read(response, ["data", "tipo"], "") !== "usuario") {
+                throw new Error("Escaneie o QR de um usuário ativo.");
             }
-        });
+            const user = response.data.usuario;
+            state.selectedUser = user.nome || user.username || "";
+            state.waitingForUserScan = false;
+            playSound("success");
+            renderActionForm(state.pendingAction);
+            ui.feedback(`Usuário selecionado: ${state.selectedUser}`, "success");
+        } catch (error) {
+            state.waitingForUserScan = false;
+            playSound("error");
+            renderActionForm(state.pendingAction);
+            ui.feedback(error.message || "Usuário inválido.", "error");
+        }
+    }
+
+    async function handleLocationScan(code) {
+        ui.loader("Validando localização...");
+        try {
+            const response = await api.scan(code);
+            if (read(response, ["data", "tipo"], "") !== "localizacao") {
+                throw new Error("Escaneie o QR de uma localização.");
+            }
+            state.targetLocation = response.data.localizacao;
+            state.waitingForLocationScan = false;
+            playSound("success");
+            renderMoveConfirmation();
+        } catch (error) {
+            state.waitingForLocationScan = false;
+            playSound("error");
+            renderMoveScanPrompt();
+            ui.feedback(error.message || "Localização inválida.", "error");
+        }
+    }
+
+    function resetTerminal() {
+        state.currentItem = null;
+        state.pendingAction = null;
+        state.selectedUser = "";
+        state.waitingForLocationScan = false;
+        state.waitingForUserScan = false;
+        state.targetLocation = null;
+        ui.hideCard();
+        ui.setState("Aguardando leitura", "Posicione o QR do produto ou da localização.", "📷");
+        startScanner();
+    }
+
+    function productStatus(product) {
+        const quantity = Number(read(product, ["quantidade_atual"], 0) || 0);
+        const minimum = Number(read(product, ["estoque_minimo"], 0) || 0);
+        if (read(product, ["emprestimo_ativo"], null)) return { label: "Emprestado", tone: "warning", detail: "Há empréstimo aberto" };
+        if (quantity <= 0) return { label: "Sem estoque", tone: "danger", detail: "Entrada necessária" };
+        if (minimum > 0 && quantity <= minimum) return { label: "Estoque baixo", tone: "warning", detail: `Mínimo: ${minimum}` };
+        return { label: "Disponível", tone: "success", detail: "Pronto para movimentar" };
     }
 
     function renderProductCard(product) {
-        state.pendingAction = null;
-        const isBorrowed = !!product.emprestimo_ativo;
-
-        let loanInfoHTML = "";
-        let actionsHTML = "";
-
-        if (isBorrowed) {
-            const loan = product.emprestimo_ativo;
-            const loanDate = loan.data_emprestimo ? new Date(loan.data_emprestimo).toLocaleDateString("pt-BR") : "-";
-            loanInfoHTML = `
-                <div class="terminal-loan-alert">
-                    <span class="alert-icon">⚠</span>
-                    <div class="alert-body">
-                        <strong>Item Emprestado</strong>
-                        <p>Responsável: ${escapeHTML(loan.emprestado_para)}</p>
-                        <p>Data: ${loanDate}</p>
-                    </div>
-                </div>
-            `;
-
-            actionsHTML = `
-                <button class="btn btn-success btn-large" data-action="devolver">DEVOLVER</button>
-                <button class="btn btn-primary" data-action="consultar">CONSULTAR</button>
-                <button class="btn btn-danger" data-action="cancelar">Cancelar</button>
-            `;
-        } else {
-            actionsHTML = `
-                <button class="btn btn-warning" data-action="entrada">+ ADICIONAR</button>
-                <button class="btn btn-primary" data-action="retirar">RETIRAR</button>
-                <button class="btn btn-primary" data-action="emprestar">EMPRESTAR</button>
-                <button class="btn btn-primary" data-action="mover">MOVER</button>
-                <button class="btn btn-primary" data-action="consultar">CONSULTAR</button>
-                <button class="btn btn-danger" data-action="cancelar">Cancelar</button>
-            `;
+        if (!product) {
+            resetTerminal();
+            return;
         }
 
-        const card = `
-            <div class="terminal-card-header">
-                <span class="card-kicker">PRODUTO ENCONTRADO</span>
-                <h2>${escapeHTML(product.nome)}</h2>
+        const status = productStatus(product);
+        const quantity = Number(product.quantidade_atual || 0);
+        const activeLoan = product.emprestimo_ativo;
+        const unavailable = quantity <= 0;
+        const loanInfo = activeLoan ? `
+            <div class="terminal-alert">
+                <strong>Item emprestado</strong>
+                <span>${escapeHtml(activeLoan.emprestado_para || "Responsável não informado")}</span>
             </div>
-            <div class="terminal-card-body">
-                <div class="info-row"><span class="label">Modelo:</span><span class="value">${escapeHTML(product.modelo || "-")}</span></div>
-                <div class="info-row"><span class="label">Código:</span><span class="value font-mono">${escapeHTML(product.codigo)}</span></div>
-                <div class="info-row"><span class="label">Localização:</span><span class="value">${escapeHTML(product.localizacao_label || "-")}</span></div>
-                <div class="info-row"><span class="label">Qtd Atual:</span><span class="value highlight">${product.quantidade_atual ?? 0}</span></div>
-                ${loanInfoHTML}
-            </div>
-            <div class="terminal-actions layout-grid-${isBorrowed ? '3' : '6'}">
-                ${actionsHTML}
-            </div>
+        ` : "";
+
+        const actions = activeLoan ? `
+            <button class="btn btn-success btn-wide" data-action="devolver">Devolver empréstimo</button>
+            <button class="btn btn-secondary" data-action="consultar">Consultar</button>
+            <button class="btn btn-ghost" data-action="cancelar">Ler outro código</button>
+        ` : `
+            <button class="btn btn-success btn-wide" data-action="entrada">Entrada</button>
+            <button class="btn btn-danger" data-action="retirar" ${unavailable ? "disabled" : ""}>Retirar</button>
+            <button class="btn btn-primary" data-action="emprestar" ${unavailable ? "disabled" : ""}>Emprestar</button>
+            <button class="btn btn-secondary" data-action="mover">Mover</button>
+            <button class="btn btn-secondary" data-action="consultar">Consultar</button>
+            <button class="btn btn-ghost" data-action="cancelar">Ler outro código</button>
         `;
 
-        TerminalUI.showCard(card);
-        TerminalUI.setState("Produto encontrado", "Escolha a ação desejada no painel abaixo.", "📦");
-        attachCardButtonListeners(product);
+        ui.showCard(`
+            <div class="terminal-product">
+                <div class="terminal-product-main">
+                    <span class="label">Produto</span>
+                    <h2>${escapeHtml(product.nome || "Sem nome")}</h2>
+                    <div class="terminal-product-code">${escapeHtml(product.codigo || "-")} · ${escapeHtml(product.modelo || "-")}</div>
+                </div>
+                <div class="terminal-stock ${status.tone}">
+                    <strong>${quantity}</strong>
+                    <span>unid.</span>
+                </div>
+            </div>
+            <div class="terminal-status-row">
+                <span class="status-pill ${status.tone}">${escapeHtml(status.label)}</span>
+                <span>${escapeHtml(status.detail)}</span>
+            </div>
+            <div class="terminal-location">
+                <span>Localização atual</span>
+                <strong>${escapeHtml(product.localizacao_label || "-")}</strong>
+            </div>
+            ${loanInfo}
+            <div class="terminal-feedback" data-terminal-feedback hidden></div>
+            <div class="terminal-actions action-grid">${actions}</div>
+        `, status.tone);
+        ui.setState("Produto encontrado", "Confira estoque e escolha a ação.", "✅", status.tone);
     }
 
     function renderLocationCard(location) {
-        const card = `
+        ui.showCard(`
             <div class="terminal-card-header">
-                <span class="card-kicker">LOCALIZAÇÃO DETECTADA</span>
-                <h2>${escapeHTML(location.nome)}</h2>
+                <span class="label">Localização</span>
+                <h2>${escapeHtml(read(location, ["nome"], "Localização") || "Localização")}</h2>
             </div>
-            <div class="terminal-card-body">
-                <div class="info-row"><span class="label">Código:</span><span class="value font-mono">${escapeHTML(location.codigo)}</span></div>
-                <div class="info-row"><span class="label">Estrutura:</span><span class="value">${escapeHTML(location.label || "-")}</span></div>
-                <div class="info-row"><span class="label">Armário:</span><span class="value">${escapeHTML(location.armario || "-")}</span></div>
-                <div class="info-row"><span class="label">Prateleira:</span><span class="value">${escapeHTML(location.prateleira || "-")}</span></div>
+            <div class="terminal-location large">
+                <span>Código</span>
+                <strong>${escapeHtml(read(location, ["codigo"], "-") || "-")}</strong>
             </div>
-            <div class="terminal-actions layout-grid-1">
-                <button class="btn btn-danger btn-large" data-action="cancelar">Voltar</button>
+            <div class="terminal-location">
+                <span>Posição</span>
+                <strong>${escapeHtml(read(location, ["label"], "-") || "-")}</strong>
             </div>
-        `;
-        TerminalUI.showCard(card);
-        TerminalUI.setState("Localização detectada", "Informações da área do estoque.", "📍");
-        attachCardButtonListeners();
+            <div class="terminal-actions">
+                <button class="btn btn-primary btn-wide" data-action="cancelar">Ler outro código</button>
+            </div>
+        `, "info");
+        ui.setState("Localização detectada", "Use este QR ao mover um produto.", "📍", "success");
     }
 
     function renderUserCard(user) {
-        const card = `
+        ui.showCard(`
             <div class="terminal-card-header">
-                <span class="card-kicker">USUÁRIO IDENTIFICADO</span>
-                <h2>${escapeHTML(user.nome)}</h2>
+                <span class="label">Usuário</span>
+                <h2>${escapeHtml(read(user, ["nome"], "") || read(user, ["username"], "") || "Usuário")}</h2>
             </div>
-            <div class="terminal-card-body">
-                <div class="info-row"><span class="label">Nome de Usuário:</span><span class="value font-mono">${escapeHTML(user.username)}</span></div>
-                <div class="info-row"><span class="label">Perfil de Acesso:</span><span class="value">${escapeHTML(user.perfil || "-")}</span></div>
-                <div class="info-row"><span class="label">Situação:</span><span class="value">${user.ativo ? "Ativo" : "Inativo"}</span></div>
+            <div class="terminal-location">
+                <span>Login</span>
+                <strong>${escapeHtml(read(user, ["username"], "-") || "-")}</strong>
             </div>
-            <div class="terminal-actions layout-grid-1">
-                <button class="btn btn-danger btn-large" data-action="cancelar">Voltar</button>
+            <div class="terminal-location">
+                <span>Perfil</span>
+                <strong>${escapeHtml(read(user, ["perfil"], "-") || "-")}</strong>
             </div>
-        `;
-        TerminalUI.showCard(card);
-        TerminalUI.setState("Usuário identificado", "Informações da conta de acesso.", "👤");
-        attachCardButtonListeners();
+            <div class="terminal-actions">
+                <button class="btn btn-primary btn-wide" data-action="cancelar">Ler outro código</button>
+            </div>
+        `, "info");
+        ui.setState("Usuário identificado", "Use o QR dentro de uma retirada ou empréstimo.", "👤", "success");
     }
 
-    function attachCardButtonListeners(product = null) {
-        document.querySelectorAll("[data-action]").forEach(button => {
-            button.addEventListener("click", async () => {
-                const action = button.getAttribute("data-action");
-
-                if (action === "cancelar") {
-                    resetToIdle();
-                    return;
-                }
-
-                if (action === "devolver") {
-                    await handleDevolucaoDirect(product);
-                    return;
-                }
-
-                if (action === "consultar") {
-                    await handleConsultar(product);
-                    return;
-                }
-
-                if (action === "retirar" || action === "emprestar" || action === "entrada") {
-                    renderActionForm(action, product);
-                    return;
-                }
-
-                if (action === "mover") {
-                    handleMoverInitiate();
-                    return;
-                }
-            });
-        });
-    }
-
-    function renderActionForm(action, product) {
+    function renderActionForm(action) {
+        const product = read(state, ["currentItem", "produto"], null);
+        const config = ACTIONS[action];
+        if (!product || !config) return;
         state.pendingAction = action;
 
-        const titles = {
-            retirar: "REGISTRAR RETIRADA",
-            emprestar: "REGISTRAR EMPRÉSTIMO",
-            entrada: "ADICIONAR AO ESTOQUE"
-        };
-        const title = titles[action] || "OPERAÇÃO";
+        const max = config.quantityMode === "stock" ? Math.max(1, Number(product.quantidade_atual || 1)) : 9999;
+        const userField = config.requiresUser === false ? "" : renderUserField(config);
+        const dateField = config.hasReturnDate ? `
+            <label class="terminal-field">
+                <span>Data prevista</span>
+                <input id="terminalActionDate" type="date">
+            </label>
+        ` : "";
 
-        // Qty stepper: for retirada/empréstimo, max is current stock. For entrada, no practical limit.
-        const maxQty = (action === "retirar" || action === "emprestar")
-            ? (product.quantidade_atual || 1)
-            : 999;
-        const qtyStepper = buildQtyStepper(1, maxQty);
+        ui.showCard(`
+            <div class="terminal-card-header split">
+                <div>
+                    <span class="label">${escapeHtml(config.title)}</span>
+                    <h2>${escapeHtml(product.nome || "Produto")}</h2>
+                </div>
+                <span class="status-pill ${config.tone}">${product.quantidade_atual == null ? 0 : product.quantidade_atual} unid.</span>
+            </div>
+            <div class="terminal-form">
+                ${renderQuantityControl(max)}
+                ${userField}
+                ${dateField}
+                <details class="terminal-optional">
+                    <summary>Adicionar observação</summary>
+                    <label class="terminal-field">
+                        <span>Observação</span>
+                        <textarea id="terminalActionNote" rows="3" placeholder="Opcional"></textarea>
+                    </label>
+                </details>
+            </div>
+            <div class="terminal-feedback" data-terminal-feedback hidden></div>
+            <div class="terminal-actions">
+                <button class="btn btn-${config.tone} btn-wide" data-action="submit:${action}">${escapeHtml(config.submit)}</button>
+                <button class="btn btn-ghost" data-action="voltar-produto">Voltar ao produto</button>
+            </div>
+        `, "prompt");
+        ui.setState(config.state, "Ajuste quantidade e confirme.", "⚙️", "loading");
+    }
 
-        // User select (not needed for entrada)
-        let userField = "";
-        if (action !== "entrada") {
-            userField = `
-                <div class="form-group">
-                    <label class="form-label" for="terminalActionUser">Usuário Destinatário *</label>
-                    ${buildUserSelectHTML("terminalActionUser")}
+    function renderUserField(config) {
+        if (state.selectedUser) {
+            return `
+                <div class="terminal-selected-user">
+                    <span>${escapeHtml(config.userLabel || "Usuário")}</span>
+                    <strong>${escapeHtml(state.selectedUser)}</strong>
+                    <input id="terminalActionUser" type="hidden" value="${escapeHtml(state.selectedUser)}">
+                    <button type="button" class="btn btn-secondary" data-action="scan-user">Trocar por QR</button>
                 </div>
             `;
         }
 
-        // Date field for empréstimo
-        let extraFields = "";
-        if (action === "emprestar") {
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 7);
-            const tomorrowStr = tomorrow.toISOString().split("T")[0];
-            extraFields = `
-                <div class="form-group">
-                    <label class="form-label" for="terminalActionDate">Data Prevista de Retorno *</label>
-                    <input id="terminalActionDate" type="date" class="terminal-input" required value="${tomorrowStr}">
+        return `
+            <label class="terminal-field">
+                <span>${escapeHtml(config.userLabel || "Usuário")}</span>
+                <div class="terminal-user-entry">
+                    ${renderUserInput()}
+                    <button type="button" class="btn btn-secondary" data-action="scan-user">QR usuário</button>
                 </div>
-            `;
-        }
+            </label>
+        `;
+    }
 
-        const card = `
-            <div class="terminal-card-header">
-                <span class="card-kicker">${title}</span>
-                <h2>${escapeHTML(product.nome)}</h2>
-            </div>
-            <div class="terminal-card-body">
-                <form id="terminalActionForm">
-                    ${qtyStepper}
-                    ${userField}
-                    ${extraFields}
-                    <div class="form-group">
-                        <label class="form-label" for="terminalActionNote">Observação Opcional</label>
-                        <textarea id="terminalActionNote" rows="2" class="terminal-textarea" placeholder="Observações operacionais..."></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="terminal-actions layout-grid-2">
-                <button class="btn btn-success btn-large" id="btnConfirmAction">CONFIRMAR</button>
-                <button class="btn btn-danger btn-large" id="btnCancelAction">Voltar</button>
+    function renderUserInput() {
+        if (!state.activeUsers.length) {
+            return `<input id="terminalActionUser" type="text" placeholder="Nome do usuário">`;
+        }
+        const options = state.activeUsers
+            .map((user) => {
+                const label = user.nome || user.username;
+                return `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`;
+            })
+            .join("");
+        return `<select id="terminalActionUser"><option value="">Selecione...</option>${options}</select>`;
+    }
+
+    function renderQuantityControl(max) {
+        return `
+            <div class="terminal-qty" data-max="${max}">
+                <span>Quantidade</span>
+                <div class="terminal-qty-control">
+                    <button type="button" class="btn btn-secondary" data-qty="-1">-1</button>
+                    <input id="terminalActionQty" type="number" min="1" max="${max}" value="1" inputmode="numeric">
+                    <button type="button" class="btn btn-secondary" data-qty="1">+1</button>
+                    <button type="button" class="btn btn-secondary" data-qty="5">+5</button>
+                    <button type="button" class="btn btn-secondary" data-qty="10">+10</button>
+                </div>
             </div>
         `;
-
-        TerminalUI.showCard(card);
-        TerminalUI.setState("Preencher detalhes", "Insira as informações operacionais.", "⚙️");
-
-        // Attach qty stepper listeners
-        attachQtyStepperListeners();
-
-        document.getElementById("btnCancelAction").addEventListener("click", () => {
-            renderProductCard(product);
-        });
-
-        document.getElementById("btnConfirmAction").addEventListener("click", async () => {
-            const qtyVal = parseInt(document.getElementById("terminalActionQty").value, 10) || 1;
-
-            if (action !== "entrada") {
-                const userField = document.getElementById("terminalActionUser");
-                const userVal = userField.value;
-
-                if (!userVal) {
-                    TerminalUI.showToast("Informe o usuário responsável.", "error");
-                    playSound("error");
-                    userField.focus();
-                    return;
-                }
-
-                let dateVal = "";
-                if (action === "emprestar") {
-                    const dateField = document.getElementById("terminalActionDate");
-                    dateVal = dateField.value;
-                    if (!dateVal) {
-                        TerminalUI.showToast("Selecione a data prevista de retorno.", "error");
-                        playSound("error");
-                        dateField.focus();
-                        return;
-                    }
-                }
-
-                const noteVal = document.getElementById("terminalActionNote").value.trim();
-
-                await submitAction(action, product.codigo, {
-                    usuario: userVal,
-                    quantidade: qtyVal,
-                    data_prevista: dateVal,
-                    observacao: noteVal
-                });
-            } else {
-                // Entrada (add stock)
-                const noteVal = document.getElementById("terminalActionNote").value.trim();
-                await submitAction("entrada", product.codigo, {
-                    quantidade: qtyVal,
-                    observacao: noteVal
-                });
-            }
-        });
     }
 
-    async function submitAction(action, codigo, payload) {
-        TerminalUI.showLoader("Registrando...");
-        try {
-            const data = {
-                action: action,
-                codigo: codigo,
-                ...payload
-            };
-            const response = await TerminalApi.action(data);
-            playSound("success");
-            TerminalUI.showToast(response.data?.mensagem || "Operação realizada com sucesso!", "success");
-            TerminalUI.hideCard();
-            TerminalUI.setState("Operação realizada", "Retornando para a câmera...", "✅");
-            resetToIdleDelayed(2000);
-        } catch (error) {
-            TerminalUI.showToast(error.message || "Erro ao registrar operação", "error");
+    function normalizeQuantity() {
+        const wrapper = document.querySelector(".terminal-qty");
+        const input = dom.byId("terminalActionQty");
+        if (!wrapper || !input) return 1;
+        const max = Number(wrapper.dataset.max || 9999);
+        const value = Math.min(max, Math.max(1, Number(input.value || 1)));
+        input.value = String(value);
+        return value;
+    }
+
+    function changeQuantity(delta) {
+        const input = dom.byId("terminalActionQty");
+        if (!input) return;
+        input.value = String(Number(input.value || 1) + delta);
+        normalizeQuantity();
+    }
+
+    function startUserScan() {
+        if (!state.pendingAction) return;
+        state.waitingForUserScan = true;
+        ui.showCard(`
+            <div class="scan-guidance">
+                <span class="label">Selecionar usuário</span>
+                <h2>Escaneie o QR do usuário</h2>
+                <p>${escapeHtml(read(ACTIONS, [state.pendingAction, "title"], "Operação") || "Operação")} · ${escapeHtml(read(state, ["currentItem", "produto", "nome"], "Produto") || "Produto")}</p>
+            </div>
+            <div class="terminal-feedback" data-terminal-feedback hidden></div>
+            <div class="terminal-actions">
+                <button class="btn btn-danger btn-wide" data-action="cancel-user-scan">Voltar ao formulário</button>
+            </div>
+        `, "prompt");
+        ui.setState("Aguardando usuário", "Aponte a câmera para o QR do usuário.", "👤", "loading");
+        startScanner();
+    }
+
+    async function submitMovement(action) {
+        if (state.isSubmitting) return;
+        const product = read(state, ["currentItem", "produto"], null);
+        const config = ACTIONS[action];
+        if (!product || !config) return;
+
+        const userInput = dom.byId("terminalActionUser");
+        const usuario = userInput && userInput.value ? userInput.value.trim() : "";
+        if (config.requiresUser !== false && !usuario) {
+            ui.feedback("Informe ou escaneie o usuário responsável.", "error");
             playSound("error");
-            // Do not hide the form card on error, let the operator retry or cancel
-            if (state.currentItem && state.currentItem.tipo === "produto") {
-                TerminalUI.setState("Erro na operação", "Verifique os dados e tente novamente.", "❌");
-            }
+            return;
         }
-    }
 
-    async function handleDevolucaoDirect(product) {
-        TerminalUI.showLoader("Registrando devolução...");
+        state.isSubmitting = true;
+        document.body.classList.add("is-submitting");
+        ui.loader("Registrando operação...");
         try {
-            const response = await TerminalApi.action({
-                action: "devolver",
-                codigo: product.codigo
+            const response = await api.action({
+                action,
+                codigo: product.codigo,
+                quantidade: normalizeQuantity(),
+                usuario,
+                data_prevista: dom.byId("terminalActionDate") ? dom.byId("terminalActionDate").value : "",
+                observacao: dom.byId("terminalActionNote") && dom.byId("terminalActionNote").value ? dom.byId("terminalActionNote").value.trim() : "",
             });
-            playSound("success");
-            TerminalUI.showToast(response.data?.mensagem || "Devolução registrada com sucesso!", "success");
-            TerminalUI.hideCard();
-            TerminalUI.setState("Operação realizada", "Item retornado ao estoque. Voltando para a câmera...", "✅");
-            resetToIdleDelayed(2000);
+            completeAction(read(response, ["data", "mensagem"], "Operação registrada.") || "Operação registrada.");
         } catch (error) {
-            TerminalUI.showToast(error.message || "Erro ao registrar devolução", "error");
-            playSound("error");
-            renderProductCard(product);
+            renderActionForm(action);
+            failAction(error.message || "Falha ao registrar operação.");
+        } finally {
+            state.isSubmitting = false;
+            document.body.classList.remove("is-submitting");
         }
     }
 
-    function handleMoverInitiate() {
+    async function submitSimpleAction(action, payload = {}) {
+        if (state.isSubmitting) return;
+        const product = read(state, ["currentItem", "produto"], null);
+        if (!product) return;
+
+        state.isSubmitting = true;
+        document.body.classList.add("is-submitting");
+        ui.loader("Registrando operação...");
+        try {
+            const response = await api.action({ action, codigo: product.codigo, ...payload });
+            completeAction(read(response, ["data", "mensagem"], "Operação registrada.") || "Operação registrada.");
+        } catch (error) {
+            renderProductCard(product);
+            failAction(error.message || "Falha ao registrar operação.");
+        } finally {
+            state.isSubmitting = false;
+            document.body.classList.remove("is-submitting");
+        }
+    }
+
+    function startMoveFlow() {
         state.waitingForLocationScan = true;
-        state.newLocation = null;
-        TerminalUI.hideCard();
-        TerminalUI.setState("Aguardando localização", "Escaneie o QR Code da nova localização...", "📍");
-        startScanner().catch(() => {});
+        state.targetLocation = null;
+        renderMoveScanPrompt();
+        startScanner();
     }
 
-    function renderMoverConfirmation() {
-        const product = state.currentItem.produto;
-        const newLoc = state.newLocation;
-
-        const card = `
-            <div class="terminal-card-header">
-                <span class="card-kicker">MOVER LOCALIZAÇÃO</span>
-                <h2>${escapeHTML(product.nome)}</h2>
+    function renderMoveScanPrompt() {
+        const product = read(state, ["currentItem", "produto"], null);
+        if (!product) return;
+        state.waitingForLocationScan = true;
+        ui.showCard(`
+            <div class="scan-guidance">
+                <span class="label">Mover produto</span>
+                <h2>${escapeHtml(product.nome || "Produto")}</h2>
+                <div class="terminal-location">
+                    <span>Origem</span>
+                    <strong>${escapeHtml(product.localizacao_label || "-")}</strong>
+                </div>
+                <p>Escaneie agora o QR da nova localização.</p>
             </div>
-            <div class="terminal-card-body">
-                <div class="info-row"><span class="label">Origem:</span><span class="value">${escapeHTML(product.localizacao_label || "Sem local fixa")}</span></div>
-                <div class="info-row"><span class="label">Destino:</span><span class="value highlight">${escapeHTML(newLoc.label || newLoc.nome)}</span></div>
-                <div class="form-group" style="margin-top:0.5rem;">
-                    <label class="form-label" for="terminalMoveNote">Observação Opcional</label>
-                    <textarea id="terminalMoveNote" rows="2" class="terminal-textarea" placeholder="Ex.: Remanejamento de prateleira..."></textarea>
+            <div class="terminal-feedback" data-terminal-feedback hidden></div>
+            <div class="terminal-actions">
+                <button class="btn btn-danger btn-wide" data-action="cancel-move">Voltar ao produto</button>
+            </div>
+        `, "prompt");
+        ui.setState("Aguardando localização", "Aponte para o QR da nova prateleira.", "📍", "loading");
+    }
+
+    function renderMoveConfirmation() {
+        const product = read(state, ["currentItem", "produto"], null);
+        const location = state.targetLocation;
+        if (!product || !location) return;
+
+        ui.showCard(`
+            <div class="terminal-card-header">
+                <span class="label">Confirmar mudança</span>
+                <h2>${escapeHtml(product.nome || "Produto")}</h2>
+            </div>
+            <div class="move-route">
+                <div>
+                    <span>Origem</span>
+                    <strong>${escapeHtml(product.localizacao_label || "-")}</strong>
+                </div>
+                <div>
+                    <span>Destino</span>
+                    <strong>${escapeHtml(location.label || location.nome || "-")}</strong>
                 </div>
             </div>
-            <div class="terminal-actions layout-grid-2">
-                <button class="btn btn-success btn-large" id="btnConfirmMove">CONFIRMAR</button>
-                <button class="btn btn-danger btn-large" id="btnCancelMove">Cancelar</button>
+            <details class="terminal-optional">
+                <summary>Adicionar observação</summary>
+                <label class="terminal-field">
+                    <span>Observação</span>
+                    <textarea id="terminalMoveNote" rows="3" placeholder="Opcional"></textarea>
+                </label>
+            </details>
+            <div class="terminal-feedback" data-terminal-feedback hidden></div>
+            <div class="terminal-actions">
+                <button class="btn btn-success btn-wide" data-action="confirmar-mover">Confirmar mudança</button>
+                <button class="btn btn-ghost" data-action="voltar-produto">Voltar ao produto</button>
             </div>
-        `;
+        `, "prompt");
+        ui.setState("Confirmar mudança", "Confira origem e destino.", "⚙️", "loading");
+    }
 
-        TerminalUI.showCard(card);
-        TerminalUI.setState("Confirmar mudança", "Confirme a movimentação no estoque físico.", "⚙️");
-
-        document.getElementById("btnCancelMove").addEventListener("click", () => {
-            state.waitingForLocationScan = false;
-            state.newLocation = null;
-            renderProductCard(product);
-        });
-
-        document.getElementById("btnConfirmMove").addEventListener("click", async () => {
-            const noteVal = document.getElementById("terminalMoveNote").value.trim();
-            await submitAction("mover", product.codigo, {
-                destino: newLoc.codigo,
-                observacao: noteVal
-            });
+    async function submitMove() {
+        const location = state.targetLocation;
+        if (!location) return;
+        const moveNote = dom.byId("terminalMoveNote");
+        await submitSimpleAction("mover", {
+            destino: location.codigo || location.nome,
+            observacao: moveNote && moveNote.value ? moveNote.value.trim() : "",
         });
     }
 
-    async function handleConsultar(product) {
-        TerminalUI.showLoader("Consultando histórico...");
+    async function renderConsultation() {
+        const product = read(state, ["currentItem", "produto"], null);
+        if (!product) return;
+
+        ui.loader("Consultando histórico...");
         try {
-            const response = await TerminalApi.action({
-                action: "consultar",
-                codigo: product.codigo
-            });
+            const response = await api.action({ action: "consultar", codigo: product.codigo });
+            const detail = read(response, ["data", "produto"], null) || product;
+            const history = read(response, ["data", "historico"], []) || [];
+            ui.showCard(`
+                <div class="terminal-card-header split">
+                    <div>
+                        <span class="label">Consulta</span>
+                        <h2>${escapeHtml(detail.nome || "Produto")}</h2>
+                    </div>
+                    <span class="status-pill success">${detail.quantidade_atual == null ? 0 : detail.quantidade_atual} unid.</span>
+                </div>
+                <div class="terminal-location">
+                    <span>Localização</span>
+                    <strong>${escapeHtml(detail.localizacao_label || "-")}</strong>
+                </div>
+                <div class="terminal-history">${renderHistory(history)}</div>
+                <div class="terminal-actions">
+                    <button class="btn btn-primary btn-wide" data-action="voltar-produto">Voltar ao produto</button>
+                </div>
+            `, "info");
+            ui.setState("Ficha do produto", "Últimas movimentações do item.", "🔎", "success");
             playSound("success");
-            renderConsultationCard(response.data.produto, response.data.historico || []);
         } catch (error) {
-            TerminalUI.showToast(error.message || "Erro ao consultar histórico", "error");
-            playSound("error");
             renderProductCard(product);
+            failAction(error.message || "Falha ao consultar produto.");
         }
     }
 
-    function renderConsultationCard(product, history) {
-        let historyHTML = "";
-        if (history && history.length > 0) {
-            const items = history.map(item => {
-                const date = item.data_hora ? new Date(item.data_hora + "Z").toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-";
-                const typeLabels = {
-                    entrada: "Entrada",
-                    retirada: "Retirada",
-                    emprestimo: "Empréstimo",
-                    devolucao: "Devolução",
-                    descarte: "Descarte",
-                    mover: "Mover"
-                };
-                const badgeClass = `badge-${item.tipo}`;
-                const detail = item.observacao ? `<span class="hist-obs">${escapeHTML(item.observacao)}</span>` : "";
-                const responsible = item.responsavel_destino || item.responsavel_origem || "";
-                const respText = responsible ? `<span class="hist-resp">(${escapeHTML(responsible)})</span>` : "";
-
-                return `
-                    <div class="history-item">
-                        <span class="hist-date">${date}</span>
-                        <span class="hist-badge ${badgeClass}">${typeLabels[item.tipo] || item.tipo}</span>
-                        <span class="hist-qty">${item.tipo === "mover" ? "-" : (item.tipo === "entrada" || item.tipo === "devolucao" ? "+" : "-") + item.quantidade}</span>
-                        ${respText}
-                        ${detail}
+    function renderHistory(history) {
+        if (!history.length) return `<div class="terminal-empty">Sem movimentações recentes.</div>`;
+        return history.map((item) => {
+            const date = item.data_hora
+                ? new Date(`${item.data_hora}Z`).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                : "-";
+            const signal = item.tipo === "entrada" || item.tipo === "devolucao" ? "+" : item.tipo === "mover" ? "" : "-";
+            const responsible = item.responsavel_destino || item.responsavel_origem || item.destino || "";
+            const location = item.tipo === "mover"
+                ? item.localizacao_destino_label
+                : item.localizacao_origem_label || item.localizacao_destino_label;
+            return `
+                <div class="terminal-history-row">
+                    <div>
+                        <strong>${escapeHtml(MOVEMENT_LABELS[item.tipo] || item.tipo)}</strong>
+                        <span>${escapeHtml(date)}${responsible ? ` · ${escapeHtml(responsible)}` : ""}</span>
+                        ${location ? `<small>${escapeHtml(location)}</small>` : ""}
                     </div>
-                `;
-            }).join("");
-            historyHTML = `<div class="history-list">${items}</div>`;
-        } else {
-            historyHTML = `<div class="history-empty">Nenhuma movimentação registrada recentemente.</div>`;
-        }
-
-        const card = `
-            <div class="terminal-card-header">
-                <span class="card-kicker">CONSULTA DETALHADA</span>
-                <h2>${escapeHTML(product.nome)}</h2>
-            </div>
-            <div class="terminal-card-body scrollable-card-body">
-                <div class="info-grid">
-                    <div class="info-row"><span class="label">Modelo:</span><span class="value">${escapeHTML(product.modelo || "-")}</span></div>
-                    <div class="info-row"><span class="label">Código:</span><span class="value font-mono">${escapeHTML(product.codigo)}</span></div>
-                    <div class="info-row"><span class="label">Categoria:</span><span class="value">${escapeHTML(product.categoria || "-")}</span></div>
-                    <div class="info-row"><span class="label">Marca:</span><span class="value">${escapeHTML(product.marca || "-")}</span></div>
-                    <div class="info-row"><span class="label">Localização:</span><span class="value">${escapeHTML(product.localizacao_label || "-")}</span></div>
-                    <div class="info-row"><span class="label">Qtd Atual:</span><span class="value highlight">${product.quantidade_atual ?? 0}</span></div>
-                    <div class="info-row"><span class="label">Mínimo:</span><span class="value">${product.estoque_minimo ?? 0}</span></div>
+                    <b>${signal}${item.tipo === "mover" ? "-" : item.quantidade}</b>
                 </div>
-                <div class="history-section">
-                    <h3>Histórico Resumido (últimos 5 logs)</h3>
-                    ${historyHTML}
-                </div>
-            </div>
-            <div class="terminal-actions layout-grid-1">
-                <button class="btn btn-danger btn-large" id="btnBackFromConsult">Voltar</button>
-            </div>
-        `;
+            `;
+        }).join("");
+    }
 
-        TerminalUI.showCard(card);
-        TerminalUI.setState("Ficha de consulta", "Consulta de dados e logs do item.", "🔍");
+    function completeAction(message) {
+        playSound("success");
+        vibrate([18, 10, 18]);
+        ui.toast(message, "success");
+        state.selectedUser = "";
+        ui.hideCard();
+        ui.setState("Operação realizada", "Retornando para a câmera.", "✅", "success");
+        setTimeout(resetTerminal, 1600);
+    }
 
-        document.getElementById("btnBackFromConsult").addEventListener("click", () => {
-            renderProductCard(product);
-        });
+    function failAction(message) {
+        playSound("error");
+        vibrate([80, 25, 80]);
+        ui.toast(message, "error");
+        ui.feedback(message, "error");
+        ui.setState("Erro na operação", "Confira os dados e tente novamente.", "⚠️", "error");
+    }
+
+    function handleActionClick(event) {
+        const button = event.target.closest("[data-action]");
+        if (!button || button.disabled) return;
+        const action = button.dataset.action;
+
+        if (action === "cancelar") resetTerminal();
+        else if (action === "voltar-produto") renderProductCard(read(state, ["currentItem", "produto"], null));
+        else if (action === "mover") startMoveFlow();
+        else if (action === "cancel-move") renderProductCard(read(state, ["currentItem", "produto"], null));
+        else if (action === "scan-user") startUserScan();
+        else if (action === "cancel-user-scan") renderActionForm(state.pendingAction);
+        else if (action === "confirmar-mover") submitMove();
+        else if (action === "devolver") submitSimpleAction("devolver");
+        else if (action === "consultar") renderConsultation();
+        else if (action && action.startsWith("submit:")) submitMovement(action.split(":")[1]);
+        else if (ACTIONS[action]) renderActionForm(action);
     }
 
     async function bootstrap() {
         updateClock();
         setInterval(updateClock, 1000);
-
-        const userName = document.getElementById("terminalUserName");
+        initTabletMode();
+        document.addEventListener("click", handleActionClick);
+        document.addEventListener("click", (event) => {
+            const qtyButton = event.target.closest("[data-qty]");
+            if (qtyButton) changeQuantity(Number(qtyButton.dataset.qty));
+        });
+        document.addEventListener("change", (event) => {
+            if (event.target && event.target.id === "terminalActionQty") normalizeQuantity();
+        });
+        const manualForm = dom.byId(SELECTORS.manualForm);
+        if (manualForm) manualForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const input = dom.byId(SELECTORS.manualInput);
+            const code = input && input.value ? input.value.trim() : "";
+            if (!code) return;
+            if (input) input.value = "";
+            await handleScan(code);
+        });
 
         if (window.isSecureContext === false) {
-            TerminalUI.showToast("Câmera bloqueada: HTTPS ou localhost é obrigatório.", "error");
-            TerminalUI.setState("Câmera Bloqueada", "Navegadores móveis exigem conexão segura (HTTPS) para habilitar a câmera.", "🔒");
-            playSound("error");
-            
-            try {
-                const status = await TerminalApi.status();
-                if (userName) userName.textContent = status.data?.usuario_logado?.nome || status.data?.usuario_logado?.username || "Operador";
-                document.getElementById("terminalVersion").textContent = `v${status.data?.versao || "1.0.0"}`;
-                document.getElementById("terminalConnection").textContent = status.data?.scanner_ativo ? "ONLINE" : "OFFLINE";
-            } catch (e) {
-                console.error(e);
-            }
-            return;
+            ui.toast("A câmera exige HTTPS ou localhost.", "error");
+            ui.setState("Câmera bloqueada", "Abra o terminal em HTTPS ou localhost para liberar a câmera.", "🔒", "error");
         }
 
         try {
-            const status = await TerminalApi.status();
-            // Cache active users list in state
-            state.activeUsers = status.data?.usuarios_ativos || [];
-            
-            if (userName) {
-                userName.textContent = status.data?.usuario_logado?.nome || status.data?.usuario_logado?.username || "Operador";
-            }
-            document.getElementById("terminalVersion").textContent = `v${status.data?.versao || "1.0.0"}`;
-            document.getElementById("terminalConnection").textContent = status.data?.scanner_ativo ? "ONLINE" : "OFFLINE";
+            const status = await api.status();
+            state.activeUsers = read(status, ["data", "usuarios_ativos"], []) || [];
+            dom.setText(SELECTORS.userName, read(status, ["data", "usuario_logado", "nome"], "") || read(status, ["data", "usuario_logado", "username"], "") || "Operador");
+            dom.setText(SELECTORS.version, `v${read(status, ["data", "versao"], "1.0.0") || "1.0.0"}`);
+            const scannerActive = Boolean(read(status, ["data", "scanner_ativo"], false));
+            dom.setText(SELECTORS.connection, scannerActive ? "ONLINE" : "OFFLINE");
+            const connection = dom.byId(SELECTORS.connection);
+            if (connection) connection.classList.toggle("is-offline", !scannerActive);
         } catch (error) {
-            console.error("Terminal bootstrap failed:", error);
             if (error.status === 401 || error.status === 403) {
                 window.location.href = "/login";
                 return;
             }
+            ui.toast(error.message || "Falha ao carregar terminal.", "error");
+            dom.setText(SELECTORS.connection, "OFFLINE");
+            const connection = dom.byId(SELECTORS.connection);
+            if (connection) connection.classList.add("is-offline");
         }
 
-        await startScanner();
+        if (window.isSecureContext !== false) startScanner();
     }
 
     document.addEventListener("DOMContentLoaded", bootstrap);
